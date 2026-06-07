@@ -1,0 +1,502 @@
+'use client';
+
+import { useState } from 'react';
+import { useApp } from '@/lib/store';
+import {
+  analyzeDeal,
+  assetConfig,
+  dealCounterparties,
+  defaultOverrides,
+  matchBuyBox,
+  num,
+  pct,
+  usd,
+  usd2,
+  type DealFile,
+  type DealFileKind,
+  type MarketDeal,
+  type NapkinOverrides,
+  type NapkinScenarioOutput,
+  type Persona,
+  type Sensitivity2D,
+} from '@/lib/sim';
+
+const SECTIONS = [
+  ['overview', 'Overview'],
+  ['lookups', 'Lookups'],
+  ['assumptions', 'Assumptions'],
+  ['financing', 'Financing'],
+  ['valuation', 'Valuation'],
+  ['sensitivity', 'Sensitivity'],
+  ['files', 'Files'],
+  ['decision', 'Decision'],
+] as const;
+
+export function NapkinPanel({
+  deal,
+  onOpenConversation,
+}: {
+  deal: MarketDeal;
+  onOpenConversation: () => void;
+}) {
+  const { buyBox, overridesOf, setOverride, resetOverrides, statusOf, setStatus, mode, isAdmin, commentsOf, filesOf, addFiles } =
+    useApp();
+  const ov = overridesOf(deal.id);
+  const eff = { ...defaultOverrides(deal), ...ov };
+  const r = analyzeDeal(deal, ov);
+  const match = matchBuyBox(deal, buyBox);
+  const status = statusOf(deal.id);
+  const edited = Object.keys(ov).length > 0;
+  const cfg = assetConfig(deal.assetClass);
+  const set = (patch: Partial<NapkinOverrides>) => setOverride(deal.id, patch);
+  const go = (id: string) => document.getElementById(`sec-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  return (
+    <section className="rounded-xl border border-slate-200 bg-white">
+      {/* Sticky in-deal section nav (clickable) */}
+      <div className="sticky top-14 z-10 flex flex-wrap items-center gap-1 rounded-t-xl border-b border-slate-100 bg-white/95 px-3 py-2 backdrop-blur">
+        {SECTIONS.map(([id, label]) => (
+          <button
+            key={id}
+            onClick={() => go(id)}
+            className="rounded-md px-2 py-1 text-xs font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+          >
+            {label}
+          </button>
+        ))}
+        <button
+          onClick={onOpenConversation}
+          className="ml-auto rounded-md border border-slate-300 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100"
+        >
+          💬 {commentsOf(deal.id).length}
+        </button>
+      </div>
+
+      {/* Overview */}
+      <div id="sec-overview" className="scroll-mt-36 border-b border-slate-100 p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold">{deal.name}</h2>
+            <div className="text-xs text-slate-500">
+              {deal.address}, {deal.city}, {deal.state} · {deal.msa}
+            </div>
+          </div>
+          <div className="text-right">
+            <div className="text-lg font-semibold tabular-nums">{usd(deal.askPrice)}</div>
+            <div className="text-xs text-slate-500">Ask · {usd(deal.askPrice / deal.unitCount)}/{cfg.unitNoun}</div>
+          </div>
+        </div>
+        <p className="mt-2 text-sm text-slate-600">{deal.blurb}</p>
+        <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-slate-500">
+          <Chip>{cfg.label}</Chip>
+          <Chip>Built {deal.vintage}</Chip>
+          <Chip>{deal.unitCount} {cfg.unitNounPlural}</Chip>
+          <Chip>{num(deal.rentableSqft)} sf</Chip>
+          <Chip>Prop ★{deal.propertyRating}</Chip>
+          <Chip>Loc ★{deal.locationRating}</Chip>
+          <Chip>{deal.broker}</Chip>
+        </div>
+        {!match.matches && (
+          <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs text-amber-800">
+            Outside buy box: {match.reasons.join(' · ')}
+          </div>
+        )}
+        {mode === 'game' && isAdmin && <Counterparties dealId={deal.id} />}
+      </div>
+
+      {/* AI Enhanced Data */}
+      <div id="sec-lookups" className="scroll-mt-36 border-b border-slate-100 bg-slate-50/60 p-4">
+        <h3 className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <span>✨ AI Enhanced Data</span>
+          <span className="rounded bg-violet-100 px-1.5 py-0.5 text-[9px] font-medium text-violet-700">auto-pulled from address</span>
+        </h3>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+          <Look label="Median income" value={usd(deal.lookups.medianHouseholdIncome, { compact: true })} source="U.S. Census ACS" />
+          <Look label="Flood zone" value={deal.lookups.floodZone.split(' ')[1] ?? deal.lookups.floodZone} title={deal.lookups.floodZone} warn={deal.lookups.floodZone.includes('AE')} source="FEMA NFHL" />
+          <Look label="Crime index" value={`${deal.lookups.crimeIndex}/100`} warn={deal.lookups.crimeIndex >= 60} source="FBI UCR + local" />
+          <Look label="Population" value={`${deal.lookups.populationTrendPct >= 0 ? '↑' : '↓'} ${Math.abs(deal.lookups.populationTrendPct)}%/yr`} warn={deal.lookups.populationTrendPct < 0} source="Census + Esri" />
+          <Look label="Rent growth" value={`${deal.lookups.rentGrowthYoYPct >= 0 ? '+' : ''}${deal.lookups.rentGrowthYoYPct}%`} source="CoStar / Radix" />
+        </div>
+      </div>
+
+      {/* Assumptions */}
+      <div id="sec-assumptions" className="scroll-mt-36 border-b border-slate-100 p-4">
+        <div className="mb-2 flex items-center justify-between">
+          <h3 className="text-sm font-semibold">Napkin assumptions</h3>
+          {edited && (
+            <button onClick={() => resetOverrides(deal.id)} className="text-xs text-slate-500 underline hover:text-slate-900">
+              Reset to listing
+            </button>
+          )}
+        </div>
+        <Field label="Offer price" value={eff.offerPrice} step={100_000} onChange={(v) => set({ offerPrice: v })} money wide />
+        <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="rounded-lg border border-slate-200 p-3">
+            <div className="mb-2 text-xs font-semibold text-slate-600">Current (from financials)</div>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+              <Field label="In-place rent /mo" value={eff.avgInPlaceRent} onChange={(v) => set({ avgInPlaceRent: v })} money />
+              <Field label={`Exp /${cfg.unitNoun}/yr`} value={eff.currentExpensePerUnit} step={100} onChange={(v) => set({ currentExpensePerUnit: v })} money />
+              <PctField label="Walk-in cap" value={eff.walkInCapRate} onChange={(v) => set({ walkInCapRate: v })} />
+              <PctField label="Vacancy" value={eff.currentVacancy} onChange={(v) => set({ currentVacancy: v })} />
+            </div>
+            <div className="mt-2 rounded bg-slate-50 px-2 py-1 text-[11px] text-slate-600">
+              → Implied current expense ratio: <b>{pct(r.current.expenseRatio)}</b>
+            </div>
+          </div>
+          <div className="rounded-lg border border-emerald-200 bg-emerald-50/40 p-3">
+            <div className="mb-2 text-xs font-semibold text-emerald-700">Proforma (your plan)</div>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+              <Field label="Market rent /mo" value={eff.avgMarketRent} onChange={(v) => set({ avgMarketRent: v })} money />
+              <PctField label="Stabilized vacancy" value={eff.stabilizedVacancy} onChange={(v) => set({ stabilizedVacancy: v })} />
+              <PctField label="Proforma exp ratio" value={eff.proformaExpenseRatio} onChange={(v) => set({ proformaExpenseRatio: v })} />
+              <PctField label="Valuation cap" value={eff.stabilizedCapRate} onChange={(v) => set({ stabilizedCapRate: v })} />
+            </div>
+            <div className="mt-2 rounded bg-emerald-50 px-2 py-1 text-[11px] text-emerald-800">
+              → Proforma value: <b>{usd(r.proforma.valueAtCap, { compact: true })}</b> at {pct(eff.stabilizedCapRate)} cap
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Financing */}
+      <div id="sec-financing" className="scroll-mt-36 border-b border-slate-100 p-4">
+        <h3 className="mb-2 text-sm font-semibold">Financing</h3>
+        <div className="mb-3 flex rounded-lg border border-slate-300 p-0.5 text-xs font-medium">
+          <button
+            onClick={() => set({ financingType: 'new' })}
+            className={`flex-1 rounded-md px-3 py-1.5 ${eff.financingType === 'new' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'}`}
+          >
+            New loan (size to LTV)
+          </button>
+          <button
+            onClick={() => set({ financingType: 'assumption' })}
+            className={`flex-1 rounded-md px-3 py-1.5 ${eff.financingType === 'assumption' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'}`}
+          >
+            Loan assumption (specify loan)
+          </button>
+        </div>
+
+        <div className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-4">
+          {eff.financingType === 'new' ? (
+            <PctField label="LTV" value={eff.ltv} onChange={(v) => set({ ltv: v })} />
+          ) : (
+            <Field label="Assumed loan $" value={eff.assumedLoanAmount} step={100_000} onChange={(v) => set({ assumedLoanAmount: v })} money />
+          )}
+          <PctField label="Interest rate" value={eff.interestRate} onChange={(v) => set({ interestRate: v })} />
+          <Field label="Amort (months)" value={eff.amortMonths} step={12} onChange={(v) => set({ amortMonths: v })} />
+        </div>
+
+        <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <Stat label="Loan amount" value={usd(r.financing.loanAmount, { compact: true })} />
+          <Stat
+            label={eff.financingType === 'assumption' ? 'Down payment (derived)' : 'Down payment'}
+            value={usd(r.financing.downPayment, { compact: true })}
+          />
+          <Stat label="Down payment %" value={pct(r.financing.downPaymentPct)} />
+          <Stat label="Effective LTV" value={pct(r.financing.ltv)} />
+        </div>
+        <div className="mt-2 flex items-baseline gap-2">
+          <span className="text-xs text-slate-500">DSCR (stabilized):</span>
+          <span className={`text-lg font-bold ${r.financing.financeable ? 'text-emerald-600' : 'text-red-600'}`}>
+            {r.financing.dscr.toFixed(2)}
+          </span>
+          <span className="text-xs text-slate-500">
+            need ≥ 1.25 · {r.financing.financeable ? '✓ financeable' : '✕ short — more equity / lower price'}
+          </span>
+        </div>
+        {eff.financingType === 'assumption' && (
+          <p className="mt-1 text-[11px] text-slate-500">
+            Assumption: down payment = offer − loan, and the down-payment % is computed (not input). Matches the Synthesis dashboard change you asked for.
+          </p>
+        )}
+      </div>
+
+      {/* Valuation */}
+      <div id="sec-valuation" className="scroll-mt-36 border-b border-slate-100 p-4">
+        <h3 className="mb-2 text-sm font-semibold">Valuation</h3>
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-xs text-slate-500">
+              <th className="text-left font-medium">Metric</th>
+              <th className="text-right font-medium">Current</th>
+              <th className="text-right font-medium">Proforma</th>
+            </tr>
+          </thead>
+          <tbody className="tabular-nums">
+            <RowR label="Economic income" cur={usd(r.current.economicIncome)} pro={usd(r.proforma.economicIncome)} />
+            <RowR label="Operating expenses" cur={usd(r.current.expenseTotal)} pro={usd(r.proforma.expenseTotal)} />
+            <RowR label="Expense ratio" cur={pct(r.current.expenseRatio)} pro={pct(r.proforma.expenseRatio)} muted />
+            <RowR label="NOI" cur={usd(r.current.noi)} pro={usd(r.proforma.noi)} bold />
+            <RowR label="Value at cap" cur={usd(r.current.valueAtCap)} pro={usd(r.proforma.valueAtCap)} bold />
+            <RowR label={`Value / ${cfg.unitNoun}`} cur={usd(r.current.valuePerUnit)} pro={usd(r.proforma.valuePerUnit)} muted />
+            <RowR label="Value vs offer" cur={<Verdict s={r.current} />} pro={<Verdict s={r.proforma} />} />
+          </tbody>
+        </table>
+        <div className="mt-3 rounded-lg bg-slate-50 p-3">
+          <div className="text-xs font-semibold text-slate-600">Affordability</div>
+          <div className="mt-1 text-sm text-slate-700">
+            Avg local household can afford <b>{usd2(r.affordableRent)}</b>/mo · your proforma rent {usd2(eff.avgMarketRent)} ·{' '}
+            <span className={eff.avgMarketRent <= r.affordableRent ? 'text-emerald-600' : 'text-amber-600'}>
+              {eff.avgMarketRent <= r.affordableRent ? 'within reach' : 'above affordability'}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Sensitivity */}
+      <div id="sec-sensitivity" className="scroll-mt-36 border-b border-slate-100 p-4">
+        <h3 className="mb-1 text-sm font-semibold">Value sensitivity — exit cap × expense ratio</h3>
+        <p className="mb-2 text-[11px] text-slate-500">
+          ⬛ = your assumptions; the dotted row marks today&apos;s in-place expense ratio.
+        </p>
+        <SensitivityGrid s={r.sensitivity} offer={eff.offerPrice} />
+      </div>
+
+      {/* Files */}
+      <FilesSection dealId={deal.id} files={filesOf(deal.id)} addFiles={addFiles} />
+
+      {/* Decision */}
+      <div id="sec-decision" className="scroll-mt-36 p-4">
+        <h3 className="mb-2 text-sm font-semibold">Decision</h3>
+        <div className="flex flex-wrap gap-2">
+          <DecisionBtn active={false} tone="emerald" onClick={() => setStatus(deal.id, 'detailed')}>
+            Pass napkin → Detailed UW{mode === 'game' ? ' (−$7,500 costs)' : ''}
+          </DecisionBtn>
+          <DecisionBtn active={status === 'napkin'} tone="sky" onClick={() => setStatus(deal.id, 'napkin')}>
+            Keep underwriting
+          </DecisionBtn>
+          <DecisionBtn active={status === 'archived'} tone="slate" onClick={() => setStatus(deal.id, 'archived')}>
+            Archive
+          </DecisionBtn>
+        </div>
+        <p className="mt-2 text-xs text-slate-500">
+          Passing napkin advances the deal to Detailed UW (T-12 + rent roll), then LOI → Contract-to-Close → Asset Management.
+        </p>
+      </div>
+    </section>
+  );
+}
+
+function FilesSection({
+  dealId,
+  files,
+  addFiles,
+}: {
+  dealId: string;
+  files: DealFile[];
+  addFiles: ReturnType<typeof useApp>['addFiles'];
+}) {
+  const [kind, setKind] = useState<DealFileKind>('OM');
+  function onPick(e: React.ChangeEvent<HTMLInputElement>) {
+    const picked = Array.from(e.target.files ?? []);
+    if (picked.length === 0) return;
+    addFiles(
+      dealId,
+      picked.map((f) => ({ id: `${dealId}-${f.name}-${Date.now()}`, name: f.name, kind, sizeBytes: f.size, ts: Date.now() })),
+    );
+    e.target.value = '';
+  }
+  const badge: Record<DealFileKind, string> = {
+    T12: 'bg-indigo-100 text-indigo-700',
+    RentRoll: 'bg-violet-100 text-violet-700',
+    OM: 'bg-amber-100 text-amber-700',
+    CoStar: 'bg-sky-100 text-sky-700',
+    Other: 'bg-slate-100 text-slate-600',
+  };
+  return (
+    <div id="sec-files" className="scroll-mt-36 border-b border-slate-100 p-4">
+      <h3 className="mb-1 text-sm font-semibold">Deal files</h3>
+      <p className="mb-2 text-[11px] text-slate-500">
+        Broker OM, CoStar report, T-12, rent roll — stored with the deal (replaces the Google-Drive-folder-per-deal pattern).
+      </p>
+      <ul className="mb-2 space-y-1">
+        {files.length === 0 && <li className="text-xs text-slate-400">No files yet.</li>}
+        {files.map((f) => (
+          <li key={f.id} className="flex items-center gap-2 text-sm">
+            <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${badge[f.kind]}`}>{f.kind}</span>
+            <span className="truncate text-slate-700">{f.name}</span>
+            <span className="ml-auto text-[11px] text-slate-400">{Math.max(1, Math.round(f.sizeBytes / 1024))} KB</span>
+          </li>
+        ))}
+      </ul>
+      <div className="flex items-center gap-2">
+        <select
+          value={kind}
+          onChange={(e) => setKind(e.target.value as DealFileKind)}
+          className="rounded-md border border-slate-300 px-2 py-1 text-xs focus:outline-none"
+        >
+          {(['OM', 'CoStar', 'T12', 'RentRoll', 'Other'] as DealFileKind[]).map((k) => (
+            <option key={k} value={k}>
+              {k}
+            </option>
+          ))}
+        </select>
+        <label className="cursor-pointer rounded-md border border-slate-300 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100">
+          + Upload file
+          <input type="file" multiple className="hidden" onChange={onPick} />
+        </label>
+      </div>
+    </div>
+  );
+}
+
+function SensitivityGrid({ s, offer }: { s: Sensitivity2D; offer: number }) {
+  const cellTone = (v: number) => {
+    const ratio = offer > 0 ? v / offer : 0;
+    if (ratio >= 1.1) return 'bg-emerald-100 text-emerald-900';
+    if (ratio >= 1) return 'bg-emerald-50 text-slate-700';
+    if (ratio >= 0.9) return 'bg-amber-50 text-amber-900';
+    return 'bg-red-50 text-red-900';
+  };
+  return (
+    <div className="overflow-x-auto">
+      <table className="border-collapse text-xs">
+        <thead>
+          <tr>
+            <th className="px-2 py-1 text-left font-medium text-slate-500">Exp ratio ↓ / Cap →</th>
+            {s.capRates.map((c, ci) => (
+              <th key={ci} className={`px-2 py-1 text-right font-medium ${ci === s.centerCol ? 'text-slate-900 underline' : 'text-slate-500'}`}>
+                {pct(c)}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {s.expenseRatios.map((er, ri) => (
+            <tr key={ri} className={ri === s.currentRow ? 'outline-dotted outline-1 outline-slate-400' : ''}>
+              <td className={`px-2 py-1 font-medium ${ri === s.centerRow ? 'text-slate-900 underline' : 'text-slate-600'}`}>
+                {pct(er)}
+                {ri === s.currentRow && <span className="ml-1 text-[9px] text-slate-400">in-place</span>}
+              </td>
+              {s.values[ri].map((v, ci) => {
+                const isCenter = ri === s.centerRow && ci === s.centerCol;
+                return (
+                  <td key={ci} className={`px-2 py-1 text-right tabular-nums ${cellTone(v)} ${isCenter ? 'ring-2 ring-inset ring-slate-900 font-bold' : ''}`}>
+                    {usd(v, { compact: true })}
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="mt-1 text-[11px] text-slate-400">Green ≈ value at/above your offer ({usd(offer, { compact: true })}); red below.</p>
+    </div>
+  );
+}
+
+// --- small pieces ---
+
+function Chip({ children }: { children: React.ReactNode }) {
+  return <span className="rounded bg-slate-100 px-1.5 py-0.5">{children}</span>;
+}
+
+function Counterparties({ dealId }: { dealId: string }) {
+  const { broker, seller } = dealCounterparties(dealId);
+  return (
+    <div className="mt-3 rounded-lg border border-violet-200 bg-violet-50/50 p-3">
+      <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-violet-700">
+        🎭 Counterparties <span className="rounded bg-violet-100 px-1 text-[9px]">game</span>
+      </div>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <PersonaCard role="Broker" p={broker} />
+        <PersonaCard role="Seller" p={seller} />
+      </div>
+    </div>
+  );
+}
+
+function PersonaCard({ role, p }: { role: string; p: Persona }) {
+  return (
+    <div className="rounded-md border border-violet-100 bg-white p-2">
+      <div className="text-[10px] uppercase tracking-wide text-slate-400">{role}</div>
+      <div className="text-sm font-semibold text-slate-800">{p.name}</div>
+      <div className="text-[11px] text-slate-500">{p.blurb}</div>
+      <div className="mt-1 text-[11px] text-violet-700">💡 {p.tells[0]}</div>
+    </div>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5">
+      <div className="text-[10px] uppercase tracking-wide text-slate-400">{label}</div>
+      <div className="text-sm font-semibold text-slate-800">{value}</div>
+    </div>
+  );
+}
+
+function Look({ label, value, warn, title, source }: { label: string; value: string; warn?: boolean; title?: string; source?: string }) {
+  return (
+    <div title={title} className="rounded-md border border-slate-200 bg-white px-2 py-1.5">
+      <div className="text-[10px] uppercase tracking-wide text-slate-400">{label}</div>
+      <div className={`text-sm font-semibold ${warn ? 'text-amber-600' : 'text-slate-800'}`}>{value}</div>
+      {source && <div className="mt-0.5 text-[9px] text-slate-400">src: {source}</div>}
+    </div>
+  );
+}
+
+function RowR({ label, cur, pro, bold, muted }: { label: string; cur: React.ReactNode; pro: React.ReactNode; bold?: boolean; muted?: boolean }) {
+  return (
+    <tr className={`border-t border-slate-50 ${muted ? 'text-slate-500' : ''}`}>
+      <td className={`py-1 text-left ${bold ? 'font-semibold' : ''}`}>{label}</td>
+      <td className={`py-1 text-right ${bold ? 'font-semibold' : ''}`}>{cur}</td>
+      <td className={`py-1 text-right ${bold ? 'font-semibold' : ''}`}>{pro}</td>
+    </tr>
+  );
+}
+
+function Verdict({ s }: { s: NapkinScenarioOutput }) {
+  const tone = s.verdict === 'below-ask' ? 'text-emerald-600' : s.verdict === 'paying-over-ask' ? 'text-red-600' : 'text-slate-600';
+  const label =
+    s.verdict === 'below-ask' ? `+${pct(s.pctVsAsk)} (under value)` : s.verdict === 'paying-over-ask' ? `${pct(s.pctVsAsk)} (over value)` : 'at value';
+  return <span className={`font-semibold ${tone}`}>{label}</span>;
+}
+
+function Field({ label, value, onChange, step = 1, money, wide }: { label: string; value: number; onChange: (v: number) => void; step?: number; money?: boolean; wide?: boolean }) {
+  return (
+    <label className={`block ${wide ? 'max-w-xs' : ''}`}>
+      <span className="text-[11px] font-medium text-slate-500">{label}</span>
+      <div className="relative">
+        {money && <span className="pointer-events-none absolute left-2 top-1.5 text-xs text-slate-400">$</span>}
+        <input
+          type="number"
+          value={value}
+          step={step}
+          onChange={(e) => onChange(Number(e.target.value))}
+          className={`w-full rounded-md border border-slate-300 py-1 text-sm tabular-nums focus:border-slate-900 focus:outline-none ${money ? 'pl-5 pr-2' : 'px-2'}`}
+        />
+      </div>
+    </label>
+  );
+}
+
+function PctField({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
+  return (
+    <label className="block">
+      <span className="text-[11px] font-medium text-slate-500">{label}</span>
+      <div className="relative">
+        <input
+          type="number"
+          value={+(value * 100).toFixed(2)}
+          step={0.25}
+          onChange={(e) => onChange(Number(e.target.value) / 100)}
+          className="w-full rounded-md border border-slate-300 py-1 pl-2 pr-5 text-sm tabular-nums focus:border-slate-900 focus:outline-none"
+        />
+        <span className="pointer-events-none absolute right-2 top-1.5 text-xs text-slate-400">%</span>
+      </div>
+    </label>
+  );
+}
+
+function DecisionBtn({ children, active, tone, onClick }: { children: React.ReactNode; active: boolean; tone: 'emerald' | 'sky' | 'slate'; onClick: () => void }) {
+  const base = 'rounded-lg px-4 py-2 text-sm font-medium border transition';
+  const styles = active
+    ? { emerald: 'bg-emerald-600 text-white border-emerald-600', sky: 'bg-sky-600 text-white border-sky-600', slate: 'bg-slate-700 text-white border-slate-700' }[tone]
+    : { emerald: 'border-emerald-300 text-emerald-700 hover:bg-emerald-50', sky: 'border-sky-300 text-sky-700 hover:bg-sky-50', slate: 'border-slate-300 text-slate-700 hover:bg-slate-100' }[tone];
+  return (
+    <button onClick={onClick} className={`${base} ${styles}`}>
+      {children}
+    </button>
+  );
+}
