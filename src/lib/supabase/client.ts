@@ -1,11 +1,9 @@
 'use client';
 
 import { createBrowserClient } from '@supabase/ssr';
+import { SUPABASE_ANON_KEY, SUPABASE_URL } from './config';
 
-/** Browser-side Supabase client (uses the public anon key). */
+/** Browser-side Supabase client (credeals' own NEXT_PUBLIC_SB_* env vars). */
 export function createClient() {
-  return createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-  );
+  return createBrowserClient(SUPABASE_URL!, SUPABASE_ANON_KEY!);
 }

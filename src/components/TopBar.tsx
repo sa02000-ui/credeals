@@ -2,6 +2,7 @@
 
 import { useApp } from '@/lib/store';
 import { usd } from '@/lib/sim';
+import { AuthStatus } from '@/components/AuthStatus';
 
 export function TopBar() {
   const { mode, setMode, cashBalance, day, resetAll, isAdmin, setAdmin } = useApp();
@@ -77,6 +78,8 @@ export function TopBar() {
           >
             Reset
           </button>
+
+          <AuthStatus />
         </div>
       </div>
     </header>
