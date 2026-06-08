@@ -68,6 +68,7 @@ interface AppContextValue extends AppState {
   addDeal: (deal: MarketDeal) => Promise<string>;
   commentsOf: (dealId: string) => DealComment[];
   addComment: (dealId: string, text: string, opts?: { author?: string; parentId?: string }) => void;
+  toggleLike: (dealId: string, commentId: string, who?: string) => void;
   filesOf: (dealId: string) => DealFile[];
   addFiles: (dealId: string, files: DealFile[]) => void;
   resetAll: () => void;
@@ -96,6 +97,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const a = new URLSearchParams(window.location.search).get('admin');
       if (a === '1') next = { ...next, isAdmin: true };
       if (a === '0') next = { ...next, isAdmin: false };
+      // mode chosen on the public landing (Play Simulation / Live Deal)
+      const pm = localStorage.getItem('credeals-pending-mode');
+      if (pm === 'game' || pm === 'real') {
+        next = { ...next, mode: pm };
+        localStorage.removeItem('credeals-pending-mode');
+      }
     } catch {
       /* ignore */
     }
@@ -253,6 +260,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 parentId: opts?.parentId,
               },
             ],
+          },
+        })),
+      toggleLike: (dealId, commentId, who = 'You') =>
+        setState((s) => ({
+          ...s,
+          comments: {
+            ...s.comments,
+            [dealId]: (s.comments[dealId] ?? []).map((c) => {
+              if (c.id !== commentId) return c;
+              const likes = c.likes ?? [];
+              return { ...c, likes: likes.includes(who) ? likes.filter((x) => x !== who) : [...likes, who] };
+            }),
           },
         })),
       filesOf: (id) => state.files[id] ?? [],

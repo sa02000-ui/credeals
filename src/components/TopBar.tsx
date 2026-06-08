@@ -73,14 +73,17 @@ export function TopBar() {
             </button>
           </div>
 
-          <button
-            onClick={() => {
-              if (confirm('Reset all progress (buy box, statuses, cash)?')) resetAll();
-            }}
-            className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-100"
-          >
-            Reset
-          </button>
+          {/* Reset is a game-mode concept (resets simulated progress); nothing to reset on live deals */}
+          {mode === 'game' && (
+            <button
+              onClick={() => {
+                if (confirm('Reset simulated progress (buy box, statuses, cash)?')) resetAll();
+              }}
+              className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-100"
+            >
+              Reset
+            </button>
+          )}
 
           <AuthStatus />
         </div>

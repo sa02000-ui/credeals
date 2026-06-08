@@ -192,6 +192,8 @@ export interface DealComment {
   ts: number;
   /** id of the comment this replies to; undefined = top-level */
   parentId?: string;
+  /** names/emails of people who 👍'd (read-acknowledge / like) */
+  likes?: string[];
 }
 
 /** A file attached to a deal (broker OM, CoStar report, T-12, rent roll, etc.). */
