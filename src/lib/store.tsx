@@ -1,6 +1,8 @@
 'use client';
 
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { isSupabaseConfigured } from './supabase/config';
+import { createClient } from './supabase/client';
 import {
   DEFAULT_BUY_BOX,
   SEED_DEALS,
@@ -104,6 +106,31 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       /* ignore */
     }
   }, [state, hydrated]);
+
+  // When Supabase is configured, the signed-in user's profile.is_admin drives admin tools.
+  useEffect(() => {
+    if (!isSupabaseConfigured()) return;
+    const supabase = createClient();
+    let active = true;
+    async function loadProfile() {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!active) return;
+      if (!user) {
+        setState((s) => ({ ...s, isAdmin: false }));
+        return;
+      }
+      const { data } = await supabase.from('profiles').select('is_admin').eq('id', user.id).single();
+      if (active && data) setState((s) => ({ ...s, isAdmin: !!data.is_admin }));
+    }
+    loadProfile();
+    const { data: sub } = supabase.auth.onAuthStateChange(() => loadProfile());
+    return () => {
+      active = false;
+      sub.subscription.unsubscribe();
+    };
+  }, []);
 
   const value = useMemo<AppContextValue>(() => {
     const deals = [...state.customDeals, ...SEED_DEALS];
