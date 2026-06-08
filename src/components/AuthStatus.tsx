@@ -3,32 +3,26 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { isSupabaseConfigured } from '@/lib/supabase/config';
-import { createClient } from '@/lib/supabase/client';
+import { readCookieSession } from '@/lib/supabase/token';
 
 export function AuthStatus() {
-  const configured = isSupabaseConfigured();
   const [email, setEmail] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    if (!configured) {
+    if (!isSupabaseConfigured()) {
       setReady(true);
       return;
     }
-    const supabase = createClient();
-    supabase.auth.getUser().then(({ data }) => {
-      setEmail(data.user?.email ?? null);
-      setReady(true);
-    });
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
-      setEmail(session?.user?.email ?? null);
-    });
-    return () => sub.subscription.unsubscribe();
-  }, [configured]);
+    // identity from the cookie session (avoids the supabase-js getUser() hang)
+    const sess = readCookieSession();
+    setEmail(sess?.email ?? null);
+    setReady(true);
+  }, []);
 
   if (!ready) return null;
 
-  if (!configured || !email) {
+  if (!email) {
     return (
       <Link
         href="/login"

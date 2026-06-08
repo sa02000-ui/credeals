@@ -2,7 +2,9 @@
 
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { isSupabaseConfigured } from './supabase/config';
-import { createClient } from './supabase/client';
+import { dataClient } from './supabase/dataClient';
+import { readCookieSession } from './supabase/token';
+import { listDeals, insertDeal, updateDealStage } from './data/deals';
 import {
   DEFAULT_BUY_BOX,
   SEED_DEALS,
@@ -63,7 +65,7 @@ interface AppContextValue extends AppState {
   overridesOf: (dealId: string) => Partial<NapkinOverrides>;
   setOverride: (dealId: string, patch: Partial<NapkinOverrides>) => void;
   resetOverrides: (dealId: string) => void;
-  addDeal: (deal: MarketDeal) => void;
+  addDeal: (deal: MarketDeal) => Promise<string>;
   commentsOf: (dealId: string) => DealComment[];
   addComment: (dealId: string, text: string, opts?: { author?: string; parentId?: string }) => void;
   filesOf: (dealId: string) => DealFile[];
@@ -77,6 +79,9 @@ const LS_KEY = 'cre-sim-state-v3';
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<AppState>(INITIAL);
   const [hydrated, setHydrated] = useState(false);
+  // DB-backed deals (kept out of localStorage). null = not loaded / local mode.
+  const [dbDeals, setDbDeals] = useState<MarketDeal[] | null>(null);
+  const [dbStages, setDbStages] = useState<Record<string, DealStatus>>({});
 
   useEffect(() => {
     let next: AppState = INITIAL;
@@ -107,55 +112,77 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }, [state, hydrated]);
 
-  // When Supabase is configured, the signed-in user's profile.is_admin drives admin tools.
+  // When Supabase is configured: load the signed-in user's profile (is_admin) + their deals.
+  // Session/user identity comes from the cookie (see token.ts) to avoid the supabase-js
+  // getSession() init hang; queries go through the data client (RLS via the cookie JWT).
   useEffect(() => {
     if (!isSupabaseConfigured()) return;
-    const supabase = createClient();
     let active = true;
-    async function loadProfile() {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!active) return;
-      if (!user) {
-        setState((s) => ({ ...s, isAdmin: false }));
+    (async () => {
+      const sess = readCookieSession();
+      if (!sess) {
+        if (active) {
+          setState((s) => ({ ...s, isAdmin: false }));
+          setDbDeals(null);
+        }
         return;
       }
-      const { data } = await supabase.from('profiles').select('is_admin').eq('id', user.id).single();
-      if (active && data) setState((s) => ({ ...s, isAdmin: !!data.is_admin }));
-    }
-    loadProfile();
-    const { data: sub } = supabase.auth.onAuthStateChange(() => loadProfile());
+      try {
+        const { data: prof } = await dataClient().from('profiles').select('is_admin').eq('id', sess.userId).single();
+        if (active && prof) setState((s) => ({ ...s, isAdmin: !!(prof as { is_admin?: boolean }).is_admin }));
+      } catch {
+        /* ignore */
+      }
+      try {
+        const { deals, stages } = await listDeals();
+        if (active) {
+          setDbDeals(deals);
+          setDbStages(stages);
+        }
+      } catch {
+        if (active) setDbDeals([]);
+      }
+    })();
     return () => {
       active = false;
-      sub.subscription.unsubscribe();
     };
   }, []);
 
   const value = useMemo<AppContextValue>(() => {
-    const deals = [...state.customDeals, ...SEED_DEALS];
-    const statusOf = (id: string) => state.dealStates[id]?.status ?? 'new';
+    const configured = isSupabaseConfigured();
+    const deals = configured ? (dbDeals ?? []) : [...state.customDeals, ...SEED_DEALS];
+    const statusOf = (id: string): DealStatus =>
+      configured ? (dbStages[id] ?? 'new') : (state.dealStates[id]?.status ?? 'new');
+
+    function chargePursuit(dealId: string, status: DealStatus, prev: DealStatus) {
+      // Passing napkin → detailed UW commits real third-party/diligence spend (game mode).
+      if (status === 'detailed' && prev !== 'detailed' && state.mode === 'game') {
+        setState((s) => ({
+          ...s,
+          treasury: {
+            ...s.treasury,
+            events: [
+              ...s.treasury.events,
+              { id: `${dealId}-pursuit-${Date.now()}`, day: s.day, label: `Pursuit costs — ${dealId} (reports, legal)`, amount: -PURSUIT_COST },
+            ],
+          },
+        }));
+      }
+    }
 
     function setStatus(dealId: string, status: DealStatus) {
-      setState((s) => {
-        const prev = s.dealStates[dealId]?.status ?? 'new';
-        const events = [...s.treasury.events];
-        // Passing napkin → detailed UW commits real third-party/diligence spend (game mode).
-        if (status === 'detailed' && prev !== 'detailed' && s.mode === 'game') {
-          const ev: CashEvent = {
-            id: `${dealId}-pursuit-${Date.now()}`,
-            day: s.day,
-            label: `Pursuit costs — ${dealId} (reports, legal)`,
-            amount: -PURSUIT_COST,
-          };
-          events.push(ev);
-        }
-        return {
+      const prev = statusOf(dealId);
+      if (prev === status) return;
+      chargePursuit(dealId, status, prev);
+      if (configured) {
+        setDbStages((m) => ({ ...m, [dealId]: status })); // optimistic
+        updateDealStage(dealId, status).catch(() => {}); // RLS blocks non-editors — refined with user-assignment
+      } else {
+        setState((s) => ({
           ...s,
           dealStates: { ...s.dealStates, [dealId]: { ...s.dealStates[dealId], dealId, status } },
-          treasury: { ...s.treasury, events },
-        };
-      });
+        }));
+      }
     }
 
     return {
@@ -196,12 +223,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             },
           },
         })),
-      addDeal: (deal) =>
+      addDeal: async (deal) => {
+        if (configured) {
+          const created = await insertDeal(deal);
+          setDbDeals((prev) => [created, ...(prev ?? [])]);
+          setDbStages((m) => ({ ...m, [created.id]: 'new' }));
+          return created.id;
+        }
         setState((s) => ({
           ...s,
           customDeals: [deal, ...s.customDeals],
           dealStates: { ...s.dealStates, [deal.id]: { dealId: deal.id, status: 'new' } },
-        })),
+        }));
+        return deal.id;
+      },
       commentsOf: (id) => state.comments[id] ?? [],
       addComment: (dealId, text, opts) =>
         setState((s) => ({
@@ -228,7 +263,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         })),
       resetAll: () => setState(INITIAL),
     };
-  }, [state, hydrated]);
+  }, [state, hydrated, dbDeals, dbStages]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }

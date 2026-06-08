@@ -119,6 +119,8 @@ export interface MarketDeal {
 
   /** true for player-added deals */
   custom?: boolean;
+  /** which world this deal lives in (DB-backed deals) */
+  simMode?: SimMode;
 }
 
 /** The player's acquisition criteria. */

@@ -28,7 +28,7 @@ export function AddDealModal({ onClose, onAdded }: { onClose: () => void; onAdde
 
   const upd = (patch: Partial<typeof f>) => setF((s) => ({ ...s, ...patch }));
 
-  function submit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
     const id = `custom-${f.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}-${Date.now().toString(36)}`;
     const deal: MarketDeal = {
@@ -59,12 +59,12 @@ export function AddDealModal({ onClose, onAdded }: { onClose: () => void; onAdde
       blurb: 'Deal you sourced directly. Lookups were auto-estimated from the address.',
       custom: true,
     };
-    addDeal(deal);
+    const realId = await addDeal(deal);
     const attached: DealFile[] = [];
-    if (t12) attached.push({ id: `${id}-t12`, name: t12.name, kind: 'T12', sizeBytes: t12.size, ts: Date.now() });
-    if (rentRoll) attached.push({ id: `${id}-rr`, name: rentRoll.name, kind: 'RentRoll', sizeBytes: rentRoll.size, ts: Date.now() });
-    if (attached.length) addFiles(id, attached);
-    onAdded(id);
+    if (t12) attached.push({ id: `${realId}-t12`, name: t12.name, kind: 'T12', sizeBytes: t12.size, ts: Date.now() });
+    if (rentRoll) attached.push({ id: `${realId}-rr`, name: rentRoll.name, kind: 'RentRoll', sizeBytes: rentRoll.size, ts: Date.now() });
+    if (attached.length) addFiles(realId, attached);
+    onAdded(realId);
     onClose();
   }
 

@@ -3,7 +3,12 @@
 import { createBrowserClient } from '@supabase/ssr';
 import { SUPABASE_ANON_KEY, SUPABASE_URL } from './config';
 
-/** Browser-side Supabase client (credeals' own NEXT_PUBLIC_SB_* env vars). */
+// Singleton @supabase/ssr browser client — used for AUTH ACTIONS only (sign in / magic link /
+// OAuth / sign out), which are direct network calls and work fine. DB reads/writes use the
+// separate dataClient (cookie-token based) to avoid the getSession() init hang on fresh loads.
+let client: ReturnType<typeof createBrowserClient> | undefined;
+
 export function createClient() {
-  return createBrowserClient(SUPABASE_URL!, SUPABASE_ANON_KEY!);
+  if (!client) client = createBrowserClient(SUPABASE_URL!, SUPABASE_ANON_KEY!);
+  return client;
 }
