@@ -1,11 +1,12 @@
 'use client';
 
+import Link from 'next/link';
 import { useApp } from '@/lib/store';
 import { usd } from '@/lib/sim';
 import { AuthStatus } from '@/components/AuthStatus';
 
 export function TopBar() {
-  const { mode, setMode, cashBalance, day, resetAll, isAdmin, setAdmin } = useApp();
+  const { mode, setMode, cashBalance, day, resetAll, isAdmin } = useApp();
   const low = cashBalance < 25_000;
 
   return (
@@ -23,13 +24,13 @@ export function TopBar() {
 
         <div className="ml-auto flex items-center gap-3">
           {isAdmin && (
-            <button
-              onClick={() => setAdmin(false)}
-              title="Admin mode on (persona tuning visible). Click to exit."
+            <Link
+              href="/admin"
+              title="Open the admin console"
               className="rounded-md border border-violet-300 bg-violet-50 px-2 py-1 text-xs font-semibold text-violet-700 hover:bg-violet-100"
             >
               ★ Admin
-            </button>
+            </Link>
           )}
           {/* Treasury — game mode only (see DESIGN §4.5) */}
           {mode === 'game' && (
