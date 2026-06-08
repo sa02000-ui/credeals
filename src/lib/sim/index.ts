@@ -5,3 +5,4 @@ export * from './format';
 export * from './deal';
 export * from './assetClasses';
 export * from './personas';
+export * from './detailedUW';

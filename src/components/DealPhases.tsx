@@ -3,7 +3,9 @@
 import { useState } from 'react';
 import { useApp } from '@/lib/store';
 import { NapkinPanel } from '@/components/NapkinPanel';
-import { DetailedUWPanel, LOIPanel, C2CPanel, AMPanel } from '@/components/PhasePanels';
+import { DetailedUWPanel } from '@/components/DetailedUWPanel';
+import { LOIPanel } from '@/components/LOIPanel';
+import { C2CPanel, AMPanel } from '@/components/PhasePanels';
 import { PHASES, stageDef, stageIndex, type DealStage, type MarketDeal } from '@/lib/sim';
 
 export function DealPhases({ deal, onOpenConversation }: { deal: MarketDeal; onOpenConversation: () => void }) {
