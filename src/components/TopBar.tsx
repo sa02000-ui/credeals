@@ -45,10 +45,13 @@ export function TopBar() {
               </div>
             </div>
           )}
-          <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-right">
-            <div className="text-[10px] uppercase tracking-wide text-slate-500">Day</div>
-            <div className="text-sm font-semibold">{day}</div>
-          </div>
+          {/* Day — game mode only (no simulated time in real mode) */}
+          {mode === 'game' && (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-right">
+              <div className="text-[10px] uppercase tracking-wide text-slate-500">Day</div>
+              <div className="text-sm font-semibold">{day}</div>
+            </div>
+          )}
 
           {/* Mode toggle */}
           <div className="flex rounded-lg border border-slate-300 p-0.5 text-xs font-medium">
