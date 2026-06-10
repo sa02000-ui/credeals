@@ -1,13 +1,16 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
 import { useApp } from '@/lib/store';
-import { usd } from '@/lib/sim';
+import { treasuryBalance, usd } from '@/lib/sim';
 import { AuthStatus } from '@/components/AuthStatus';
 
 export function TopBar() {
-  const { mode, setMode, cashBalance, day, resetAll, isAdmin, difficulty, clockPaused, setClockPaused, clockMinutesPerDay, setClockSpeed } = useApp();
+  const { mode, setMode, cashBalance, day, resetAll, isAdmin, difficulty, clockPaused, setClockPaused, clockMinutesPerDay, setClockSpeed, treasury } = useApp();
   const low = cashBalance < 25_000;
+  const [showLedger, setShowLedger] = useState(false);
+  const carryingCost = treasuryBalance(treasury) - cashBalance; // accumulated daily carrying costs
 
   return (
     <header className="sticky top-0 z-10 border-b border-slate-200 bg-white/90 backdrop-blur">
@@ -35,12 +38,36 @@ export function TopBar() {
           {/* Prominent cash + clock HUD — game mode only (off in real mode) */}
           {mode === 'game' && (
             <div className="flex items-stretch gap-2">
-              <div
-                className={`flex flex-col justify-center rounded-xl border-2 px-4 py-1.5 text-right ${low ? 'border-red-400 bg-red-50' : 'border-emerald-300 bg-emerald-50'}`}
-                title="Simulated bank balance. Outflows: carrying costs, pursuit/diligence, EMD. Off in real mode."
-              >
-                <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500">💵 Cash</div>
-                <div className={`text-lg font-extrabold leading-none tabular-nums ${low ? 'text-red-600' : 'text-emerald-700'}`}>{usd(cashBalance)}</div>
+              <div className="relative">
+                <button
+                  onClick={() => setShowLedger((v) => !v)}
+                  className={`flex h-full flex-col justify-center rounded-xl border-2 px-4 py-1.5 text-right transition hover:brightness-95 ${low ? 'border-red-400 bg-red-50' : 'border-emerald-300 bg-emerald-50'}`}
+                  title="Click to see where your cash went"
+                >
+                  <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500">💵 Cash ▾</div>
+                  <div className={`text-lg font-extrabold leading-none tabular-nums ${low ? 'text-red-600' : 'text-emerald-700'}`}>{usd(cashBalance)}</div>
+                </button>
+                {showLedger && (
+                  <>
+                    <div className="fixed inset-0 z-30" onClick={() => setShowLedger(false)} />
+                    <div className="absolute right-0 top-full z-40 mt-1 w-80 rounded-xl border border-slate-200 bg-white p-3 shadow-2xl">
+                      <div className="mb-2 text-sm font-bold text-slate-800">Where your cash went</div>
+                      <div className="max-h-72 space-y-1 overflow-y-auto">
+                        <LedgerRow label="Starting capital" day={1} amount={treasury.startingBalance} />
+                        {[...treasury.events].reverse().map((e) => (
+                          <LedgerRow key={e.id} label={e.label} day={e.day} amount={e.amount} />
+                        ))}
+                        {carryingCost > 0 && (
+                          <LedgerRow label={`Carrying costs (overhead, ${day - 1} day${day - 1 === 1 ? '' : 's'})`} day={day} amount={-carryingCost} />
+                        )}
+                      </div>
+                      <div className="mt-2 flex justify-between border-t border-slate-200 pt-2 text-sm font-bold">
+                        <span className="text-slate-700">Balance</span>
+                        <span className={`tabular-nums ${low ? 'text-red-600' : 'text-emerald-700'}`}>{usd(cashBalance)}</span>
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
               <div className="flex items-center gap-2 rounded-xl border-2 border-indigo-300 bg-indigo-50 px-3 py-1.5">
                 <div className="text-right">
@@ -106,5 +133,17 @@ export function TopBar() {
         </div>
       </div>
     </header>
+  );
+}
+
+function LedgerRow({ label, day, amount }: { label: string; day: number; amount: number }) {
+  return (
+    <div className="flex items-baseline gap-2 text-xs">
+      <span className="shrink-0 rounded bg-slate-100 px-1 text-[10px] tabular-nums text-slate-500">d{day}</span>
+      <span className="min-w-0 flex-1 truncate text-slate-700" title={label}>{label}</span>
+      <span className={`shrink-0 font-semibold tabular-nums ${amount < 0 ? 'text-red-600' : 'text-emerald-700'}`}>
+        {amount < 0 ? '−' : '+'}{usd(Math.abs(amount))}
+      </span>
+    </div>
   );
 }

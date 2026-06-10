@@ -1,5 +1,47 @@
 # Scenario authoring guide
 
+## ⭐ THE QUICK FORM — just tell it in words (owner's version)
+
+Don't worry about ids, weights, flags, or effects — describe the scenario in plain words using this
+shape and Claude builds the rest (and saves it into the Scenario Builder for tuning):
+
+```
+SCENARIO: <name>            WHEN: <which step of the deal — e.g. during C2C / after LOI / while doing napkin>
+
+SITUATION: <what happens, 1–2 sentences. Who's talking? (broker / seller / lender / inspector…)>
+
+CHOICES:
+  1. <what the player can do>  →  <what happens. cost? days lost? "sometimes X, sometimes Y" is fine>
+  2. <another choice>          →  <what happens>
+  3. <another choice>          →  <what happens>
+
+THEN (optional — go as deep as you want):
+  if <choice or outcome> → SITUATION: <the follow-up> with CHOICES: 1… 2…
+  (you can also say "then go to scenario <name>" to connect scenarios)
+```
+
+**Example, fully in words:**
+
+```
+SCENARIO: Title surprise        WHEN: during C2C
+
+SITUATION: Title search finds an old utility easement across the back parcel. Title company flags it.
+
+CHOICES:
+  1. Ask seller to cure it → usually they handle it (takes ~2 weeks), but sometimes they refuse
+  2. Accept it with title insurance carve-out → fast, but if it later matters you eat the cost
+  3. Walk → deal dies
+
+THEN: if seller refuses → SITUATION: your lawyer says you can close anyway with an escrow holdback.
+  CHOICES: 1. Demand $50k holdback → seller usually agrees  2. Close as-is → hidden risk later
+```
+
+That's all I need. Severity, probabilities, and dollar amounts get tuned in the Scenario Builder afterward.
+
+---
+
+## The detailed structure (what Claude builds from your words)
+
 This is the structure you fill in to add **deep, branching scenarios** anywhere in the game. The engine
 (`src/lib/sim/scenarios.ts` + `ScenarioRunner.tsx`) plays them. You write a small decision tree; the player
 walks it; choices apply effects (cash / time / reputation / flags) and branch to the next step — including
