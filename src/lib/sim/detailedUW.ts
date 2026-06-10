@@ -139,6 +139,9 @@ export interface DetailedUWInputs {
 
   // --- Sample investor ---
   sampleInvestment: number;
+
+  // --- Per-line, per-year overrides ($ for a given line id + year; replaces the grown value) ---
+  lineOverrides?: Record<string, Record<number, number>>;
 }
 
 export interface UWYear {
@@ -215,6 +218,10 @@ export interface DetailedUWResult {
   waterfall: WaterfallYear[];
   sampleReturn: SampleReturn;
 
+  // per-line, per-year effective $ (override or computed), years 1..hold — for the editable grid
+  incomeDetail: Record<string, number[]>;
+  expenseDetail: Record<string, number[]>;
+
   // alerts
   seniorMaturesEarly: boolean;
   sellerMaturesEarly: boolean;
@@ -290,16 +297,36 @@ export function runDetailedUW(i: DetailedUWInputs): DetailedUWResult {
   const seniorLoan = i.financingType === 'new' ? Math.round(price * i.ltv) : i.loanAmount;
   const grow = (rate: number, y: number) => Math.pow(1 + rate, y - 1);
 
-  // --- P&L through hold+1 ---
+  // --- P&L through hold+1 (per-line, honoring per-year overrides) ---
+  const ovr = i.lineOverrides ?? {};
+  const lineY = (it: LineItem, ctx: LineCtx, gr: number, y: number): number => {
+    const o = ovr[it.id]?.[y];
+    return o != null ? o : lineAmount(it, ctx) * Math.pow(1 + gr, y - 1);
+  };
+  const incomeDetail: Record<string, number[]> = {};
+  const expenseDetail: Record<string, number[]> = {};
+  i.otherIncome.forEach((it) => (incomeDetail[it.id] = []));
+  i.expenses.forEach((it) => (expenseDetail[it.id] = []));
+
   const noiByYear: number[] = [];
   const pnl: UWYear[] = [];
   for (let y = 1; y <= hold + 1; y++) {
     const gpr = i.avgRentMo * 12 * units * grow(i.rentGrowthPct, y);
     const incCtx: LineCtx = { units, price, loan: seniorLoan, egi: 0 };
-    const otherIncome = sumLines(i.otherIncome, incCtx) * grow(i.otherIncomeGrowthPct, y);
+    let otherIncome = 0;
+    i.otherIncome.forEach((it) => {
+      const v = lineY(it, incCtx, i.otherIncomeGrowthPct, y);
+      otherIncome += v;
+      if (y <= hold) incomeDetail[it.id].push(v);
+    });
     const egi = (gpr + otherIncome) * (1 - i.vacancy);
     const expCtx: LineCtx = { units, price, loan: seniorLoan, egi };
-    const opex = sumLines(i.expenses, expCtx) * grow(i.expenseGrowthPct, y);
+    let opex = 0;
+    i.expenses.forEach((it) => {
+      const v = lineY(it, expCtx, i.expenseGrowthPct, y);
+      opex += v;
+      if (y <= hold) expenseDetail[it.id].push(v);
+    });
     const noi = egi - opex;
     noiByYear[y] = noi;
     pnl.push({ year: y, gpr, otherIncome, egi, opex, noi, dsSenior: 0, dsSupp: 0, dsSeller: 0, dsRefi: 0, debtService: 0, cashFlow: 0, financingProceeds: 0, dscr: 0, debtBalanceEnd: 0 });
@@ -545,6 +572,8 @@ export function runDetailedUW(i: DetailedUWInputs): DetailedUWResult {
     prefIRR,
     waterfall,
     sampleReturn,
+    incomeDetail,
+    expenseDetail,
     seniorMaturesEarly: !i.refiEnabled && i.loanTermYears > 0 && i.loanTermYears < hold,
     sellerMaturesEarly: i.sellerEnabled && i.sellerTermYears > 0 && i.sellerTermYears < hold,
   };

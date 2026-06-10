@@ -8,6 +8,7 @@ import { DetailedUWPanel } from '@/components/DetailedUWPanel';
 import { LOIPanel } from '@/components/LOIPanel';
 import { C2CPanel, AMPanel } from '@/components/PhasePanels';
 import { DocumentsPanel } from '@/components/DocumentsPanel';
+import { DealPeoplePanel } from '@/components/DealPeoplePanel';
 import { PHASES, stageDef, stageIndex, type DealStage, type MarketDeal } from '@/lib/sim';
 
 type Tab = DealStage | 'docs';
@@ -30,6 +31,8 @@ export function DealPhases({ deal, onOpenConversation }: { deal: MarketDeal; onO
 
   return (
     <div className="space-y-3">
+      <DealPeoplePanel deal={deal} />
+
       {/* Per-deal lifecycle nav — the authoritative stage tracker for this deal */}
       <div className="rounded-xl border border-indigo-200 bg-gradient-to-r from-indigo-50 to-white p-1.5">
         <div className="flex flex-wrap gap-1">

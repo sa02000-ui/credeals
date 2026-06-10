@@ -196,6 +196,16 @@ export interface DealComment {
   likes?: string[];
 }
 
+/** A person assigned to a deal (Monday-style access model). Drives leads/assignees + access scope. */
+export interface DealPerson {
+  id: string;
+  name: string;
+  email?: string;
+  access: 'edit' | 'view';
+  /** lifecycle phases this person participates in; empty = all phases */
+  phases: DealStage[];
+}
+
 /** A file attached to a deal (broker OM, CoStar report, T-12, rent roll, etc.). */
 export type DealFileKind = 'T12' | 'RentRoll' | 'OM' | 'CoStar' | 'PSA' | 'LOI' | 'Other';
 

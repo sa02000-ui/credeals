@@ -1,7 +1,8 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useApp } from '@/lib/store';
+import { useDealLocal } from '@/lib/hooks/useDealLocal';
 import { InfoTip } from '@/components/InfoTip';
 import { downloadDoc, downloadPdf } from '@/lib/export/docExport';
 import { dealCounterparties, resolveOffer, usd, type MarketDeal, type OfferOutcome } from '@/lib/sim';
@@ -199,6 +200,12 @@ export function LOIPanel({ deal }: { deal: MarketDeal }) {
     extensionFee: Math.round(deal.askPrice * 0.005),
   });
   const set = (patch: Partial<LOIForm>) => setF((s) => ({ ...s, ...patch }));
+
+  // Persist the LOI financing choice so the Detailed UW stage can carry a loan assumption forward.
+  const [, setLoiRecord] = useDealLocal<{ financing: Financing; purchasePrice: number }>('loi', deal.id, { financing: 'new', purchasePrice: deal.askPrice });
+  useEffect(() => {
+    setLoiRecord({ financing: f.financing, purchasePrice: f.purchasePrice });
+  }, [f.financing, f.purchasePrice, setLoiRecord]);
 
   const generated = useMemo(() => buildLOI(deal, f), [deal, f]);
   const [edited, setEdited] = useState<string | null>(null);

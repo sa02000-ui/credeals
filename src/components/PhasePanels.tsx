@@ -2,14 +2,15 @@
 
 /**
  * Contract-to-Close and Asset-Management phase panels.
- * - C2C: upload the signed PSA, set the execution date, and a full critical-dates project plan split
- *   into workstreams (Main, Title & Survey, Debt, Insurance, Capital Raise, Due Diligence, Legal),
- *   rolled up into a master plan. Keeps the game-mode capital-raise mini-game.
- * - AM: takeover + ongoing cadence checklists, recurring reminders (incl. annual tax protest /
- *   insurance compare / K-1 / cost seg) and quarterly performance logging.
+ * - C2C: signed-PSA upload, a PSA-date-driven critical-dates plan with a prominent Critical Path,
+ *   editable per-task Start/Days/Lead (from the deal's people)/%, and a per-task comment. Workstreams
+ *   (Title, Debt, Insurance, Capital Raise, DD, Legal, Main) roll into a master plan. Keeps the
+ *   game-mode capital-raise mini-game.
+ * - AM: a collapsible one-time Takeover card + recurring reminders (editable dates, assignees,
+ *   custom reminders, auto-reschedule) + quarterly performance logging.
  */
 
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import { useApp } from '@/lib/store';
 import { useDealLocal } from '@/lib/hooks/useDealLocal';
 import { InfoTip } from '@/components/InfoTip';
@@ -28,6 +29,15 @@ function PhaseShell({ title, subtitle, info, children }: { title: string; subtit
       <div className="p-4">{children}</div>
     </section>
   );
+}
+
+function addDays(iso: string, days: number): Date {
+  const d = new Date(iso + 'T00:00:00');
+  d.setDate(d.getDate() + days);
+  return d;
+}
+function fmtDate(d: Date): string {
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' });
 }
 
 // =====================================================================================
@@ -51,21 +61,21 @@ interface TaskDef {
   ws: Workstream;
   label: string;
   lead: string;
-  offset: number; // days after PSA execution the task starts
-  duration: number; // days
-  critical?: boolean; // hard deadline
+  offset: number;
+  duration: number;
+  critical?: boolean;
 }
 
 // Critical-dates engine derived from the real Contract-to-Close tracker (functionality_maps §C).
 const C2C_TASKS: TaskDef[] = [
-  { id: 'psa', ws: 'Main', label: 'PSA executed', lead: 'Sponsor', offset: 0, duration: 0, critical: true },
+  { id: 'psa', ws: 'Main', label: 'Signed PSA executed', lead: 'Sponsor', offset: 0, duration: 0, critical: true },
   { id: 'emd', ws: 'Main', label: 'Earnest money to title', lead: 'Sponsor', offset: 0, duration: 3, critical: true },
   { id: 'access', ws: 'Main', label: 'Temporary access agreement', lead: 'Sponsor', offset: 0, duration: 5 },
   { id: 'closingdocs', ws: 'Main', label: 'Closing docs + HUD settlement statement', lead: 'Title', offset: 53, duration: 7 },
   { id: 'close', ws: 'Main', label: 'Close / distribute funds', lead: 'All', offset: 60, duration: 0, critical: true },
 
   { id: 'title-order', ws: 'Title & Survey', label: 'Order title commitment', lead: 'Title', offset: 1, duration: 0 },
-  { id: 'title-review', ws: 'Title & Survey', label: 'Review title commitment', lead: 'Legal', offset: 1, duration: 30 },
+  { id: 'title-review', ws: 'Title & Survey', label: 'Title commitment received & reviewed', lead: 'Legal', offset: 1, duration: 30, critical: true },
   { id: 'survey', ws: 'Title & Survey', label: 'Order + review ALTA survey', lead: 'Surveyor', offset: 1, duration: 30 },
   { id: 'title-obj', ws: 'Title & Survey', label: 'Title/survey objections + cures', lead: 'Legal', offset: 31, duration: 7 },
 
@@ -77,7 +87,7 @@ const C2C_TASKS: TaskDef[] = [
   { id: 'rate-lock', ws: 'Debt', label: 'Rate lock', lead: 'Sponsor', offset: 47, duration: 3 },
 
   { id: 'ins-quotes', ws: 'Insurance', label: 'Request insurance quotes', lead: 'Broker', offset: 5, duration: 14 },
-  { id: 'ins-bind', ws: 'Insurance', label: 'Bind insurance (effective at close)', lead: 'Broker', offset: 50, duration: 5 },
+  { id: 'ins-bind', ws: 'Insurance', label: 'Bind insurance (effective at close)', lead: 'Broker', offset: 50, duration: 5, critical: true },
 
   { id: 'cap-su', ws: 'Capital Raise', label: 'Finalize sources & uses', lead: 'Sponsor', offset: 0, duration: 5 },
   { id: 'cap-package', ws: 'Capital Raise', label: 'Investor package + webinar', lead: 'Sponsor', offset: 5, duration: 10 },
@@ -95,35 +105,29 @@ const C2C_TASKS: TaskDef[] = [
 ];
 
 interface TaskOverride {
-  done: boolean;
-  pct: number;
+  done?: boolean;
+  pct?: number;
+  lead?: string;
+  comment?: string;
+  offset?: number;
+  duration?: number;
 }
 interface C2CState {
-  startDate: string; // ISO yyyy-mm-dd of PSA execution
+  startDate: string;
   overrides: Record<string, TaskOverride>;
 }
 
-function addDays(iso: string, days: number): Date {
-  const d = new Date(iso + 'T00:00:00');
-  d.setDate(d.getDate() + days);
-  return d;
-}
-function fmtDate(d: Date): string {
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' });
-}
-
 export function C2CPanel({ deal }: { deal: MarketDeal }) {
-  const { filesOf, addFiles } = useApp();
+  const { filesOf, addFiles, peopleOf } = useApp();
   const files = filesOf(deal.id);
   const psa = files.find((f) => f.kind === 'PSA');
+  const people = peopleOf(deal.id);
 
-  const [state, setState] = useDealLocal<C2CState>('c2c', deal.id, {
-    startDate: new Date().toISOString().slice(0, 10),
-    overrides: {},
-  });
+  const [state, setState] = useDealLocal<C2CState>('c2c', deal.id, { startDate: new Date().toISOString().slice(0, 10), overrides: {} });
   const [filter, setFilter] = useState<Workstream | 'All'>('All');
+  const [openComment, setOpenComment] = useState<string | null>(null);
 
-  const ov = (id: string): TaskOverride => state.overrides[id] ?? { done: false, pct: 0 };
+  const ov = (id: string): TaskOverride => state.overrides[id] ?? {};
   const setOv = (id: string, patch: Partial<TaskOverride>) =>
     setState((s) => ({ ...s, overrides: { ...s.overrides, [id]: { ...ov(id), ...patch } } }));
 
@@ -132,19 +136,25 @@ export function C2CPanel({ deal }: { deal: MarketDeal }) {
 
   const rows = useMemo(() => {
     return C2C_TASKS.map((t) => {
-      const start = addDays(state.startDate, t.offset);
-      const due = addDays(state.startDate, t.offset + t.duration);
-      const o = state.overrides[t.id] ?? { done: false, pct: 0 };
+      const o = state.overrides[t.id] ?? {};
+      const offset = o.offset ?? t.offset;
+      const duration = o.duration ?? t.duration;
+      const start = addDays(state.startDate, offset);
+      const due = addDays(state.startDate, offset + duration);
       const overdue = !o.done && due < today;
       const dueSoon = !o.done && !overdue && (due.getTime() - today.getTime()) / 86400000 <= 7;
-      return { t, start, due, o, overdue, dueSoon };
+      const lead = o.lead ?? t.lead;
+      return { t, offset, duration, start, due, o, overdue, dueSoon, lead };
     });
   }, [state, today]);
 
   const visible = rows.filter((r) => filter === 'All' || r.t.ws === filter);
+  const critical = rows.filter((r) => r.t.critical).sort((a, b) => a.due.getTime() - b.due.getTime());
   const doneCount = rows.filter((r) => r.o.done).length;
   const overdueCount = rows.filter((r) => r.overdue).length;
   const progress = Math.round((doneCount / rows.length) * 100);
+
+  const leadOptions = (def: TaskDef): string[] => Array.from(new Set(['Unassigned', ...people.map((p) => p.name), def.lead]));
 
   function onPickPsa(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
@@ -154,11 +164,7 @@ export function C2CPanel({ deal }: { deal: MarketDeal }) {
   }
 
   return (
-    <PhaseShell
-      title="Contract to Close"
-      info="step.c2c"
-      subtitle="Upload the signed PSA, anchor the critical-dates calendar, and drive every workstream to the closing table."
-    >
+    <PhaseShell title="Contract to Close" info="step.c2c" subtitle="Upload the signed PSA, anchor the critical-dates calendar, and drive every workstream to the closing table.">
       {/* PSA + start date */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="rounded-lg border border-slate-200 p-3">
@@ -170,86 +176,103 @@ export function C2CPanel({ deal }: { deal: MarketDeal }) {
               <label className="ml-auto cursor-pointer text-xs text-sky-600 underline">replace<input type="file" className="hidden" onChange={onPickPsa} /></label>
             </div>
           ) : (
-            <label className="flex cursor-pointer items-center justify-center rounded-md border border-dashed border-slate-300 px-3 py-3 text-xs font-medium text-slate-500 hover:bg-slate-50">
-              + Upload signed PSA
-              <input type="file" className="hidden" onChange={onPickPsa} />
-            </label>
+            <label className="flex cursor-pointer items-center justify-center rounded-md border border-dashed border-slate-300 px-3 py-3 text-xs font-medium text-slate-500 hover:bg-slate-50">+ Upload signed PSA<input type="file" className="hidden" onChange={onPickPsa} /></label>
           )}
         </div>
         <div className="rounded-lg border border-slate-200 p-3">
           <div className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-slate-600">PSA execution date <InfoTip k="c2c.criticalDates" /></div>
-          <input
-            type="date"
-            value={state.startDate}
-            onChange={(e) => setState((s) => ({ ...s, startDate: e.target.value }))}
-            className="rounded-md border border-slate-300 px-2 py-1 text-sm focus:border-slate-900 focus:outline-none"
-          />
-          <p className="mt-1 text-[11px] text-slate-500">Every task date below is computed from this date.</p>
+          <input type="date" value={state.startDate} onChange={(e) => setState((s) => ({ ...s, startDate: e.target.value }))} className="rounded-md border border-slate-300 px-2 py-1 text-sm focus:border-slate-900 focus:outline-none" />
+          <p className="mt-1 text-[11px] text-slate-500">Every task date is computed from this date (override Start/Days per task below).</p>
         </div>
       </div>
 
-      {/* Master plan progress */}
+      {/* Critical Path */}
+      <div className="mt-4 rounded-lg border-2 border-red-200 bg-red-50/40 p-3">
+        <div className="mb-2 flex items-center gap-1.5">
+          <span className="text-sm font-bold text-red-700">🚩 Critical Path</span>
+          <InfoTip k="c2c.criticalDates" />
+          <span className="ml-auto text-xs text-slate-500">{doneCount}/{rows.length} tasks done{overdueCount > 0 && <span className="font-semibold text-red-600"> · {overdueCount} overdue</span>}</span>
+        </div>
+        <ul className="space-y-1">
+          {critical.map(({ t, due, o, overdue, dueSoon, lead }) => (
+            <li key={t.id} className="flex items-center gap-2 rounded-md bg-white px-2.5 py-1.5 text-sm">
+              <input type="checkbox" checked={!!o.done} onChange={(e) => setOv(t.id, { done: e.target.checked, pct: e.target.checked ? 100 : o.pct })} className="h-4 w-4 rounded border-slate-300" />
+              <span className={o.done ? 'text-slate-400 line-through' : 'font-medium text-slate-800'}>{t.label}</span>
+              <span className="text-[11px] text-slate-400">· {lead}</span>
+              <span className={`ml-auto text-xs tabular-nums ${o.done ? 'text-emerald-600' : overdue ? 'font-semibold text-red-600' : dueSoon ? 'font-semibold text-amber-600' : 'text-slate-600'}`}>{o.done ? '✓ done' : fmtDate(due)}{overdue && !o.done ? ' ⚠' : ''}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      {/* Master plan progress + filter */}
       <div className="mt-4 rounded-lg border border-slate-200 p-3">
         <div className="mb-1 flex items-center justify-between text-xs">
           <span className="font-semibold text-slate-700">Master project plan</span>
-          <span className="text-slate-500">{doneCount}/{rows.length} done · {overdueCount > 0 ? <span className="font-semibold text-red-600">{overdueCount} overdue</span> : <span className="text-emerald-600">on track</span>}</span>
+          <span className="text-slate-500">{progress}% complete</span>
         </div>
-        <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
-          <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${progress}%` }} />
-        </div>
-        {/* Workstream filter */}
+        <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${progress}%` }} /></div>
         <div className="mt-3 flex flex-wrap gap-1.5">
           <FilterChip label="All" active={filter === 'All'} onClick={() => setFilter('All')} />
-          {WORKSTREAMS.map((w) => (
-            <FilterChip key={w.id} label={w.id} active={filter === w.id} dot={w.color} onClick={() => setFilter(w.id)} />
-          ))}
+          {WORKSTREAMS.map((w) => (<FilterChip key={w.id} label={w.id} active={filter === w.id} dot={w.color} onClick={() => setFilter(w.id)} />))}
         </div>
       </div>
 
-      {/* Task list */}
+      {/* Task table */}
       <div className="mt-3 overflow-x-auto">
-        <table className="w-full min-w-[640px] text-sm">
+        <table className="w-full min-w-[760px] text-sm">
           <thead className="text-xs text-slate-500">
             <tr>
               <th className="px-2 py-1 text-left font-medium">✓</th>
               <th className="px-2 py-1 text-left font-medium">Task</th>
               <th className="px-2 py-1 text-left font-medium">Workstream</th>
               <th className="px-2 py-1 text-left font-medium">Lead</th>
+              <th className="px-2 py-1 text-right font-medium">Start (d)</th>
+              <th className="px-2 py-1 text-right font-medium">Days</th>
               <th className="px-2 py-1 text-right font-medium">Due</th>
               <th className="px-2 py-1 text-right font-medium">%</th>
+              <th className="px-2 py-1 text-center font-medium">💬</th>
             </tr>
           </thead>
           <tbody>
-            {visible.map(({ t, due, o, overdue, dueSoon }) => {
+            {visible.map(({ t, offset, duration, due, o, overdue, dueSoon, lead }) => {
               const ws = WORKSTREAMS.find((w) => w.id === t.ws)!;
               return (
-                <tr key={t.id} className="border-t border-slate-50">
-                  <td className="px-2 py-1.5">
-                    <input type="checkbox" checked={o.done} onChange={(e) => setOv(t.id, { done: e.target.checked, pct: e.target.checked ? 100 : o.pct })} className="h-4 w-4 rounded border-slate-300" />
-                  </td>
-                  <td className="px-2 py-1.5">
-                    <span className={o.done ? 'text-slate-400 line-through' : 'text-slate-700'}>{t.label}</span>
-                    {t.critical && <span className="ml-1.5 rounded bg-red-100 px-1 text-[9px] font-semibold text-red-700">critical</span>}
-                  </td>
-                  <td className="px-2 py-1.5">
-                    <span className="inline-flex items-center gap-1 text-xs text-slate-600"><span className={`h-2 w-2 rounded-full ${ws.color}`} />{t.ws}</span>
-                  </td>
-                  <td className="px-2 py-1.5 text-xs text-slate-500">{t.lead}</td>
-                  <td className={`px-2 py-1.5 text-right text-xs tabular-nums ${overdue ? 'font-semibold text-red-600' : dueSoon ? 'font-semibold text-amber-600' : 'text-slate-600'}`}>
-                    {fmtDate(due)}{overdue && ' ⚠'}
-                  </td>
-                  <td className="px-2 py-1.5 text-right">
-                    <input type="number" min={0} max={100} value={o.pct} onChange={(e) => setOv(t.id, { pct: Number(e.target.value), done: Number(e.target.value) >= 100 })}
-                      className="w-14 rounded-md border border-slate-200 px-1 py-0.5 text-right text-xs tabular-nums focus:border-slate-400 focus:outline-none" />
-                  </td>
-                </tr>
+                <Fragment key={t.id}>
+                  <tr className="border-t border-slate-50">
+                    <td className="px-2 py-1.5"><input type="checkbox" checked={!!o.done} onChange={(e) => setOv(t.id, { done: e.target.checked, pct: e.target.checked ? 100 : o.pct })} className="h-4 w-4 rounded border-slate-300" /></td>
+                    <td className="px-2 py-1.5">
+                      <span className={o.done ? 'text-slate-400 line-through' : 'text-slate-700'}>{t.label}</span>
+                      {t.critical && <span className="ml-1.5 rounded bg-red-100 px-1 text-[9px] font-semibold text-red-700">critical</span>}
+                    </td>
+                    <td className="px-2 py-1.5"><span className="inline-flex items-center gap-1 text-xs text-slate-600"><span className={`h-2 w-2 rounded-full ${ws.color}`} />{t.ws}</span></td>
+                    <td className="px-2 py-1.5">
+                      <select value={lead} onChange={(e) => setOv(t.id, { lead: e.target.value })} className="max-w-[120px] rounded border border-slate-200 px-1 py-0.5 text-xs focus:outline-none">
+                        {leadOptions(t).map((n) => (<option key={n} value={n}>{n}</option>))}
+                      </select>
+                    </td>
+                    <td className="px-2 py-1.5 text-right"><input type="number" value={offset} onChange={(e) => setOv(t.id, { offset: Number(e.target.value) })} className="w-14 rounded border border-slate-200 px-1 py-0.5 text-right text-xs tabular-nums focus:outline-none" /></td>
+                    <td className="px-2 py-1.5 text-right"><input type="number" value={duration} onChange={(e) => setOv(t.id, { duration: Number(e.target.value) })} className="w-14 rounded border border-slate-200 px-1 py-0.5 text-right text-xs tabular-nums focus:outline-none" /></td>
+                    <td className={`px-2 py-1.5 text-right text-xs tabular-nums ${overdue ? 'font-semibold text-red-600' : dueSoon ? 'font-semibold text-amber-600' : 'text-slate-600'}`}>{fmtDate(due)}{overdue && !o.done ? ' ⚠' : ''}</td>
+                    <td className="px-2 py-1.5 text-right"><input type="number" min={0} max={100} value={o.pct ?? 0} onChange={(e) => setOv(t.id, { pct: Number(e.target.value), done: Number(e.target.value) >= 100 })} className="w-14 rounded border border-slate-200 px-1 py-0.5 text-right text-xs tabular-nums focus:outline-none" /></td>
+                    <td className="px-2 py-1.5 text-center"><button onClick={() => setOpenComment(openComment === t.id ? null : t.id)} className={`text-sm ${o.comment ? 'text-sky-600' : 'text-slate-300 hover:text-sky-600'}`} title="Comment">💬</button></td>
+                  </tr>
+                  {openComment === t.id && (
+                    <tr className="bg-slate-50">
+                      <td />
+                      <td colSpan={8} className="px-2 py-2">
+                        <textarea value={o.comment ?? ''} onChange={(e) => setOv(t.id, { comment: e.target.value })} placeholder="Notes / status update for this task…" className="h-16 w-full rounded-md border border-slate-300 px-2 py-1 text-xs focus:border-slate-900 focus:outline-none" />
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
               );
             })}
           </tbody>
         </table>
       </div>
+      {people.length === 0 && <p className="mt-2 text-[11px] text-slate-400">Tip: add partners/teammates in “👥 People &amp; access” above to assign them as task leads.</p>}
 
-      {/* Game-mode capital raise */}
       <CapitalRaise deal={deal} />
     </PhaseShell>
   );
@@ -292,9 +315,7 @@ function CapitalRaise({ deal }: { deal: MarketDeal }) {
         <>
           <div className="mt-3 flex gap-2">
             {(['solo', 'partners'] as const).map((s) => (
-              <button key={s} onClick={() => setStrategy(s)} className={`rounded-lg border px-3 py-1.5 text-sm font-medium ${strategy === s ? 'border-violet-500 bg-violet-600 text-white' : 'border-slate-300 text-slate-700 hover:bg-slate-100'}`}>
-                {s === 'solo' ? 'Raise solo' : 'Bring capital partners'}
-              </button>
+              <button key={s} onClick={() => setStrategy(s)} className={`rounded-lg border px-3 py-1.5 text-sm font-medium ${strategy === s ? 'border-violet-500 bg-violet-600 text-white' : 'border-slate-300 text-slate-700 hover:bg-slate-100'}`}>{s === 'solo' ? 'Raise solo' : 'Bring capital partners'}</button>
             ))}
             <button onClick={() => runRaise(strategy)} className="ml-auto rounded-lg bg-violet-600 px-4 py-1.5 text-sm font-semibold text-white hover:bg-violet-700">Launch the raise →</button>
           </div>
@@ -306,11 +327,7 @@ function CapitalRaise({ deal }: { deal: MarketDeal }) {
               {!outcome.success && outcome.recovery && (
                 <div className="mt-2">
                   <div className="text-xs text-amber-800">Recovery: {outcome.recovery}</div>
-                  {strategy === 'solo' && (
-                    <button onClick={() => { setStrategy('partners'); runRaise('partners'); }} className="mt-2 rounded-md border border-amber-400 px-2 py-1 text-xs font-medium text-amber-800 hover:bg-amber-100">
-                      Bring in capital partners and re-raise
-                    </button>
-                  )}
+                  {strategy === 'solo' && <button onClick={() => { setStrategy('partners'); runRaise('partners'); }} className="mt-2 rounded-md border border-amber-400 px-2 py-1 text-xs font-medium text-amber-800 hover:bg-amber-100">Bring in capital partners and re-raise</button>}
                 </div>
               )}
             </div>
@@ -333,25 +350,12 @@ interface Reminder {
   label: string;
   cadence: Cadence;
   info?: string;
-  nextDue: string; // ISO
+  nextDue: string;
   lastDone?: string;
+  assignee?: string;
 }
-
-interface QuarterLog {
-  id: string;
-  period: string;
-  occupancy: number;
-  noi: number;
-  distribution: number;
-  notes: string;
-}
-
-interface AMState {
-  takeover: Record<string, boolean>;
-  reminders: Reminder[];
-  quarters: QuarterLog[];
-  seeded: boolean;
-}
+interface QuarterLog { id: string; period: string; occupancy: number; noi: number; distribution: number; notes: string }
+interface AMState { takeover: Record<string, boolean>; takeoverCollapsed: boolean; reminders: Reminder[]; quarters: QuarterLog[]; seeded: boolean }
 
 const TAKEOVER = [
   'Property visit + arrange services',
@@ -382,77 +386,121 @@ function seedReminders(): Reminder[] {
 }
 
 export function AMPanel({ deal }: { deal: MarketDeal }) {
-  const [state, setState] = useDealLocal<AMState>('am', deal.id, { takeover: {}, reminders: [], quarters: [], seeded: false });
+  const { peopleOf } = useApp();
+  const people = peopleOf(deal.id);
+  const [state, setState] = useDealLocal<AMState>('am', deal.id, { takeover: {}, takeoverCollapsed: false, reminders: [], quarters: [], seeded: false });
   const reminders = state.seeded ? state.reminders : seedReminders();
-  const [tab, setTab] = useState<'reminders' | 'quarterly' | 'takeover'>('reminders');
+  const [tab, setTab] = useState<'reminders' | 'quarterly'>('reminders');
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  function completeReminder(id: string) {
-    setState((s) => {
-      const list = (s.seeded ? s.reminders : seedReminders()).map((r) => {
-        if (r.id !== id) return r;
-        const next = new Date(); next.setDate(next.getDate() + CADENCE_DAYS[r.cadence]);
-        return { ...r, lastDone: new Date().toISOString().slice(0, 10), nextDue: next.toISOString().slice(0, 10) };
-      });
-      return { ...s, seeded: true, reminders: list };
-    });
+  function mutateReminders(fn: (list: Reminder[]) => Reminder[]) {
+    setState((s) => ({ ...s, seeded: true, reminders: fn(s.seeded ? s.reminders : seedReminders()) }));
   }
+  function completeReminder(id: string) {
+    mutateReminders((list) => list.map((r) => {
+      if (r.id !== id) return r;
+      const next = new Date(); next.setDate(next.getDate() + CADENCE_DAYS[r.cadence]);
+      return { ...r, lastDone: new Date().toISOString().slice(0, 10), nextDue: next.toISOString().slice(0, 10) };
+    }));
+  }
+  const updateReminder = (id: string, patch: Partial<Reminder>) => mutateReminders((list) => list.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+  const addReminder = (label: string, cadence: Cadence) => mutateReminders((list) => [...list, { id: `r${Date.now()}`, label, cadence, nextDue: new Date().toISOString().slice(0, 10) }]);
+  const removeReminder = (id: string) => mutateReminders((list) => list.filter((r) => r.id !== id));
+
+  const takeoverDone = TAKEOVER.filter((l) => state.takeover[l]).length;
+  const takeoverComplete = takeoverDone === TAKEOVER.length;
+  const amPeople = people.filter((p) => p.phases.length === 0 || p.phases.includes('am'));
 
   const sortedReminders = [...reminders].sort((a, b) => a.nextDue.localeCompare(b.nextDue));
 
   return (
-    <PhaseShell
-      title="Asset Management"
-      info="step.am"
-      subtitle="Run the takeover, then operate the hold: occupancy & NOI vs. proforma, distributions, recurring obligations, and quarterly reporting."
-    >
+    <PhaseShell title="Asset Management" info="step.am" subtitle="Operate the hold: occupancy & NOI vs. proforma, distributions, recurring obligations, and quarterly reporting.">
+      {/* One-time takeover (collapsible) */}
+      <div className={`mb-4 rounded-lg border-2 ${takeoverComplete ? 'border-emerald-200 bg-emerald-50/40' : 'border-amber-200 bg-amber-50/40'}`}>
+        <button onClick={() => setState((s) => ({ ...s, takeoverCollapsed: !s.takeoverCollapsed }))} className="flex w-full items-center gap-2 px-3 py-2 text-left">
+          <span className="text-sm font-bold text-slate-800">{takeoverComplete ? '✅' : '🔑'} Property takeover</span>
+          <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-semibold text-slate-600">{takeoverDone}/{TAKEOVER.length}</span>
+          <span className="text-[11px] text-slate-500">one-time, at closing</span>
+          <span className="ml-auto text-xs text-slate-400">{state.takeoverCollapsed ? '▸ show' : '▾ hide'}</span>
+        </button>
+        {!state.takeoverCollapsed && (
+          <div className="space-y-1.5 border-t border-slate-100 p-3">
+            {TAKEOVER.map((label) => {
+              const on = !!state.takeover[label];
+              return (
+                <label key={label} className="flex cursor-pointer items-center gap-2 text-sm">
+                  <input type="checkbox" checked={on} onChange={(e) => setState((s) => ({ ...s, takeover: { ...s.takeover, [label]: e.target.checked } }))} className="h-4 w-4 rounded border-slate-300" />
+                  <span className={on ? 'text-slate-400 line-through' : 'text-slate-700'}>{label}</span>
+                </label>
+              );
+            })}
+            {takeoverComplete && <p className="pt-1 text-xs text-emerald-700">Takeover complete — collapse this and focus on ongoing operations below.</p>}
+          </div>
+        )}
+      </div>
+
+      {amPeople.length > 0 && (
+        <div className="mb-3 flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
+          <span className="font-medium text-slate-600">On asset management:</span>
+          {amPeople.map((p) => (<span key={p.id} className="rounded-full bg-slate-100 px-2 py-0.5 text-slate-700">{p.name}{p.access === 'view' ? ' (view)' : ''}</span>))}
+        </div>
+      )}
+
       <div className="mb-3 flex gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1">
-        {([['reminders', 'Reminders & tasks'], ['quarterly', 'Quarterly performance'], ['takeover', 'Takeover checklist']] as const).map(([id, label]) => (
+        {([['reminders', 'Reminders & tasks'], ['quarterly', 'Quarterly performance']] as const).map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)} className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium ${tab === id ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}>{label}</button>
         ))}
       </div>
 
       {tab === 'reminders' && (
-        <div className="space-y-1.5">
-          <p className="mb-2 text-xs text-slate-500">Recurring obligations — complete one to auto-schedule the next. Annual items (tax protest, insurance compare, K-1, cost seg) are the ones most easily missed.</p>
-          {sortedReminders.map((r) => {
-            const due = new Date(r.nextDue + 'T00:00:00');
-            const overdue = due < today;
-            const soon = !overdue && (due.getTime() - today.getTime()) / 86400000 <= 14;
-            return (
-              <div key={r.id} className="flex items-center gap-2 rounded-md border border-slate-100 px-3 py-2 text-sm">
-                <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${cadenceColor(r.cadence)}`}>{r.cadence}</span>
-                <span className="text-slate-700">{r.label}</span>
-                {r.info && <InfoTip k={r.info} />}
-                <span className={`ml-auto text-xs tabular-nums ${overdue ? 'font-semibold text-red-600' : soon ? 'font-semibold text-amber-600' : 'text-slate-500'}`}>
-                  {overdue ? 'overdue · ' : 'due '}{fmtDate(due)}
-                </span>
-                <button onClick={() => completeReminder(r.id)} className="rounded-md border border-emerald-300 px-2 py-0.5 text-xs font-medium text-emerald-700 hover:bg-emerald-50">Done</button>
-              </div>
-            );
-          })}
+        <div>
+          <p className="mb-2 text-xs text-slate-500">Recurring obligations — set dates, assign an owner, complete to auto-schedule the next. Annual items (tax protest, insurance compare, K-1, cost seg) are the easiest to miss.</p>
+          <div className="space-y-1.5">
+            {sortedReminders.map((r) => {
+              const due = new Date(r.nextDue + 'T00:00:00');
+              const overdue = due < today;
+              const soon = !overdue && (due.getTime() - today.getTime()) / 86400000 <= 14;
+              return (
+                <div key={r.id} className="flex flex-wrap items-center gap-2 rounded-md border border-slate-100 px-3 py-2 text-sm">
+                  <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${cadenceColor(r.cadence)}`}>{r.cadence}</span>
+                  <span className="text-slate-700">{r.label}</span>
+                  {r.info && <InfoTip k={r.info} />}
+                  <div className="ml-auto flex items-center gap-2">
+                    <input type="date" value={r.nextDue} onChange={(e) => updateReminder(r.id, { nextDue: e.target.value })} className={`rounded border px-1.5 py-0.5 text-xs tabular-nums focus:outline-none ${overdue ? 'border-red-300 text-red-600' : soon ? 'border-amber-300 text-amber-600' : 'border-slate-200 text-slate-600'}`} />
+                    <select value={r.assignee ?? ''} onChange={(e) => updateReminder(r.id, { assignee: e.target.value || undefined })} className="max-w-[110px] rounded border border-slate-200 px-1 py-0.5 text-xs focus:outline-none">
+                      <option value="">Unassigned</option>
+                      {people.map((p) => (<option key={p.id} value={p.name}>{p.name}</option>))}
+                    </select>
+                    <button onClick={() => completeReminder(r.id)} className="rounded-md border border-emerald-300 px-2 py-0.5 text-xs font-medium text-emerald-700 hover:bg-emerald-50">Done</button>
+                    <button onClick={() => removeReminder(r.id)} className="text-slate-300 hover:text-red-500" title="Remove">✕</button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <AddReminder onAdd={addReminder} />
         </div>
       )}
 
       {tab === 'quarterly' && <QuarterlyLog state={state} setState={setState} />}
-
-      {tab === 'takeover' && (
-        <div className="space-y-1.5">
-          {TAKEOVER.map((label) => {
-            const on = !!state.takeover[label];
-            return (
-              <label key={label} className="flex cursor-pointer items-center gap-2 rounded-md border border-slate-100 px-3 py-2 text-sm">
-                <input type="checkbox" checked={on} onChange={(e) => setState((s) => ({ ...s, takeover: { ...s.takeover, [label]: e.target.checked } }))} className="h-4 w-4 rounded border-slate-300" />
-                <span className={on ? 'text-slate-400 line-through' : 'text-slate-700'}>{label}</span>
-              </label>
-            );
-          })}
-          <p className="mt-2 text-xs text-slate-500">Connects to the live AM Portal (massiveam.com) pattern. Operating analysis vs. the proforma you promised lands in the Analysis tab next.</p>
-        </div>
-      )}
     </PhaseShell>
+  );
+}
+
+function AddReminder({ onAdd }: { onAdd: (label: string, cadence: Cadence) => void }) {
+  const [label, setLabel] = useState('');
+  const [cadence, setCadence] = useState<Cadence>('quarterly');
+  return (
+    <div className="mt-3 flex flex-wrap items-end gap-2 rounded-lg border border-dashed border-slate-300 p-3">
+      <label className="block flex-1"><span className="text-[11px] text-slate-500">New reminder</span>
+        <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="e.g. Re-shop landscaping contract" className="w-full rounded-md border border-slate-300 px-2 py-1 text-sm focus:outline-none" /></label>
+      <select value={cadence} onChange={(e) => setCadence(e.target.value as Cadence)} className="rounded-md border border-slate-300 px-2 py-1 text-sm focus:outline-none">
+        {(['weekly', 'monthly', 'quarterly', 'annual'] as Cadence[]).map((c) => (<option key={c} value={c}>{c}</option>))}
+      </select>
+      <button onClick={() => { if (label.trim()) { onAdd(label.trim(), cadence); setLabel(''); } }} className="rounded-lg bg-slate-900 px-3 py-1.5 text-sm font-semibold text-white hover:bg-slate-800">Add</button>
+    </div>
   );
 }
 
@@ -461,13 +509,7 @@ function cadenceColor(c: Cadence): string {
 }
 
 function QuarterlyLog({ state, setState }: { state: AMState; setState: (v: AMState | ((p: AMState) => AMState)) => void }) {
-  const [form, setForm] = useState<Omit<QuarterLog, 'id'>>({
-    period: `Q${Math.floor(new Date().getMonth() / 3) + 1} ${new Date().getFullYear()}`,
-    occupancy: 0.93,
-    noi: 0,
-    distribution: 0,
-    notes: '',
-  });
+  const [form, setForm] = useState<Omit<QuarterLog, 'id'>>({ period: `Q${Math.floor(new Date().getMonth() / 3) + 1} ${new Date().getFullYear()}`, occupancy: 0.93, noi: 0, distribution: 0, notes: '' });
   function add() {
     setState((s) => ({ ...s, quarters: [{ id: `q${Date.now()}`, ...form }, ...s.quarters] }));
     setForm((f) => ({ ...f, noi: 0, distribution: 0, notes: '' }));
@@ -477,19 +519,14 @@ function QuarterlyLog({ state, setState }: { state: AMState; setState: (v: AMSta
       <div className="rounded-lg border border-slate-200 p-3">
         <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-slate-600">Log this quarter <InfoTip k="am.occupancy" /></div>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <label className="block"><span className="text-[11px] text-slate-500">Period</span>
-            <input value={form.period} onChange={(e) => setForm({ ...form, period: e.target.value })} className="w-full rounded-md border border-slate-300 px-2 py-1 text-sm focus:outline-none" /></label>
-          <label className="block"><span className="text-[11px] text-slate-500">Occupancy %</span>
-            <input type="number" value={+(form.occupancy * 100).toFixed(1)} onChange={(e) => setForm({ ...form, occupancy: Number(e.target.value) / 100 })} className="w-full rounded-md border border-slate-300 px-2 py-1 text-sm tabular-nums focus:outline-none" /></label>
-          <label className="block"><span className="text-[11px] text-slate-500">NOI ($)</span>
-            <input type="number" value={form.noi} onChange={(e) => setForm({ ...form, noi: Number(e.target.value) })} className="w-full rounded-md border border-slate-300 px-2 py-1 text-sm tabular-nums focus:outline-none" /></label>
-          <label className="block"><span className="text-[11px] text-slate-500">Distribution ($)</span>
-            <input type="number" value={form.distribution} onChange={(e) => setForm({ ...form, distribution: Number(e.target.value) })} className="w-full rounded-md border border-slate-300 px-2 py-1 text-sm tabular-nums focus:outline-none" /></label>
+          <label className="block"><span className="text-[11px] text-slate-500">Period</span><input value={form.period} onChange={(e) => setForm({ ...form, period: e.target.value })} className="w-full rounded-md border border-slate-300 px-2 py-1 text-sm focus:outline-none" /></label>
+          <label className="block"><span className="text-[11px] text-slate-500">Occupancy %</span><input type="number" value={+(form.occupancy * 100).toFixed(1)} onChange={(e) => setForm({ ...form, occupancy: Number(e.target.value) / 100 })} className="w-full rounded-md border border-slate-300 px-2 py-1 text-sm tabular-nums focus:outline-none" /></label>
+          <label className="block"><span className="text-[11px] text-slate-500">NOI ($)</span><input type="number" value={form.noi} onChange={(e) => setForm({ ...form, noi: Number(e.target.value) })} className="w-full rounded-md border border-slate-300 px-2 py-1 text-sm tabular-nums focus:outline-none" /></label>
+          <label className="block"><span className="text-[11px] text-slate-500">Distribution ($)</span><input type="number" value={form.distribution} onChange={(e) => setForm({ ...form, distribution: Number(e.target.value) })} className="w-full rounded-md border border-slate-300 px-2 py-1 text-sm tabular-nums focus:outline-none" /></label>
         </div>
         <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="Notes: NOI vs proforma, capex progress, leasing, issues…" className="mt-2 h-16 w-full rounded-md border border-slate-300 px-2 py-1 text-sm focus:outline-none" />
         <button onClick={add} className="mt-2 rounded-lg bg-slate-900 px-4 py-1.5 text-sm font-semibold text-white hover:bg-slate-800">Add quarter</button>
       </div>
-
       {state.quarters.length > 0 && (
         <div className="mt-3 overflow-x-auto">
           <table className="w-full min-w-[480px] text-sm">

@@ -18,6 +18,7 @@ import {
   type CashEvent,
   type DealComment,
   type DealFile,
+  type DealPerson,
   type DealState,
   type DealStatus,
   type MarketDeal,
@@ -51,6 +52,7 @@ interface AppState {
   customDeals: MarketDeal[];
   comments: Record<string, DealComment[]>;
   files: Record<string, DealFile[]>;
+  people: Record<string, DealPerson[]>;
   treasury: TreasuryState;
   day: number;
   game: GameState;
@@ -65,6 +67,7 @@ const INITIAL: AppState = {
   customDeals: [],
   comments: {},
   files: {},
+  people: {},
   treasury: { startingBalance: STARTING_CASH, events: [] },
   day: 1,
   game: INITIAL_GAME,
@@ -91,6 +94,10 @@ interface AppContextValue extends AppState {
   toggleLike: (dealId: string, commentId: string, who?: string) => void;
   filesOf: (dealId: string) => DealFile[];
   addFiles: (dealId: string, files: DealFile[]) => void;
+  peopleOf: (dealId: string) => DealPerson[];
+  addPerson: (dealId: string, person: DealPerson) => void;
+  updatePerson: (dealId: string, id: string, patch: Partial<DealPerson>) => void;
+  removePerson: (dealId: string, id: string) => void;
   resetAll: () => void;
 }
 
@@ -330,6 +337,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           ...s,
           files: { ...s.files, [dealId]: [...(s.files[dealId] ?? []), ...newFiles] },
         })),
+      peopleOf: (id) => state.people[id] ?? [],
+      addPerson: (dealId, person) =>
+        setState((s) => ({ ...s, people: { ...s.people, [dealId]: [...(s.people[dealId] ?? []), person] } })),
+      updatePerson: (dealId, id, patch) =>
+        setState((s) => ({
+          ...s,
+          people: { ...s.people, [dealId]: (s.people[dealId] ?? []).map((p) => (p.id === id ? { ...p, ...patch } : p)) },
+        })),
+      removePerson: (dealId, id) =>
+        setState((s) => ({ ...s, people: { ...s.people, [dealId]: (s.people[dealId] ?? []).filter((p) => p.id !== id) } })),
       resetAll: () => setState(INITIAL),
     };
   }, [state, hydrated, dbDeals, dbStages]);

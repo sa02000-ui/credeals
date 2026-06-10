@@ -55,6 +55,25 @@ export function DetailedUWPanel({ deal }: { deal: MarketDeal }) {
   const egi1 = (gpr1 + oi1) * (1 - inp.vacancy);
   const expCtx: LineCtx = { ...incCtx, egi: egi1 };
 
+  // loan-assumption financing carried from the LOI stage
+  const [loiRecord] = useDealLocal<{ financing: 'new' | 'assumption'; purchasePrice: number }>('loi', deal.id, { financing: 'new', purchasePrice: deal.askPrice });
+  const loiSaysAssumption = loiRecord.financing === 'assumption' && inp.financingType !== 'assumption';
+
+  // per-line, per-year proforma overrides
+  const [showYearDetail, setShowYearDetail] = useState(false);
+  const setYearOverride = (lineId: string, year: number, value: number) => {
+    const cur = inp.lineOverrides ?? {};
+    set({ lineOverrides: { ...cur, [lineId]: { ...(cur[lineId] ?? {}), [year]: value } } });
+  };
+  const clearYearOverride = (lineId: string, year: number) => {
+    const cur = inp.lineOverrides ?? {};
+    const forLine = { ...(cur[lineId] ?? {}) };
+    delete forLine[year];
+    set({ lineOverrides: { ...cur, [lineId]: forLine } });
+  };
+  const isOverridden = (lineId: string, year: number) => inp.lineOverrides?.[lineId]?.[year] != null;
+  const anyOverrides = Object.values(inp.lineOverrides ?? {}).some((m) => Object.keys(m).length > 0);
+
   function nextScenarioName(): string {
     const nums = scenarios.map((s) => Number(/Scenario (\d+)/.exec(s.name)?.[1] ?? 0));
     return `Scenario ${Math.max(scenarios.length, ...nums) + 1}`;
@@ -207,6 +226,12 @@ export function DetailedUWPanel({ deal }: { deal: MarketDeal }) {
 
       {/* Financing */}
       <Section title="Financing — debt stack" info="f.ltv" color="sky">
+        {loiSaysAssumption && (
+          <div className="mb-3 flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            <span>Your LOI specifies a <b>loan assumption</b> — apply it here?</span>
+            <button onClick={() => set({ financingType: 'assumption' })} className="ml-auto rounded-md border border-amber-400 px-2 py-1 font-medium hover:bg-amber-100">Apply assumption</button>
+          </div>
+        )}
         <div className="mb-3 flex rounded-lg border border-slate-300 p-0.5 text-xs font-medium">
           <button onClick={() => set({ financingType: 'new' })} className={`flex-1 rounded-md px-3 py-1.5 ${inp.financingType === 'new' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'}`}>New loan (size to LTV)</button>
           <button onClick={() => set({ financingType: 'assumption' })} className={`flex-1 rounded-md px-3 py-1.5 ${inp.financingType === 'assumption' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'}`}>Loan assumption (from LOI)</button>
@@ -318,6 +343,40 @@ export function DetailedUWPanel({ deal }: { deal: MarketDeal }) {
             </tbody>
           </table>
         </div>
+      </div>
+
+      {/* Per-year editable line detail */}
+      <div className="border-b border-slate-100 p-4">
+        <button onClick={() => setShowYearDetail((v) => !v)} className="flex items-center gap-2 text-base font-bold">
+          <span>{showYearDetail ? '▾' : '▸'}</span> Year-by-year line detail (editable)
+          {anyOverrides && <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">has overrides</span>}
+        </button>
+        {showYearDetail && (
+          <div className="mt-2">
+            <p className="mb-2 text-[11px] text-slate-500">Each income/expense line grows from the Year-1 input. Type a value in any cell to <b>override that specific year</b> (highlighted); click ✕ to revert it to the calculated value.</p>
+            {anyOverrides && <button onClick={() => set({ lineOverrides: {} })} className="mb-2 text-xs text-red-500 underline hover:text-red-700">Clear all year overrides</button>}
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[560px] text-xs">
+                <thead><tr className="text-slate-500">
+                  <th className="py-1 text-left font-medium">Line</th>
+                  {r.years.map((y) => (<th key={y.year} className="py-1 text-right font-medium">Y{y.year}</th>))}
+                </tr></thead>
+                <tbody className="tabular-nums">
+                  <tr><td colSpan={r.years.length + 1} className="pt-2 text-[10px] font-bold uppercase tracking-wide text-emerald-600">Income</td></tr>
+                  {inp.otherIncome.map((it) => (
+                    <YearRow key={it.id} label={it.label} values={r.incomeDetail[it.id] ?? []} lineId={it.id}
+                      isOverridden={isOverridden} onSet={setYearOverride} onClear={clearYearOverride} />
+                  ))}
+                  <tr><td colSpan={r.years.length + 1} className="pt-2 text-[10px] font-bold uppercase tracking-wide text-amber-600">Expenses</td></tr>
+                  {inp.expenses.map((it) => (
+                    <YearRow key={it.id} label={it.label} values={r.expenseDetail[it.id] ?? []} lineId={it.id}
+                      isOverridden={isOverridden} onSet={setYearOverride} onClear={clearYearOverride} />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Waterfall */}
@@ -577,6 +636,45 @@ function Stat({ label, value }: { label: string; value: string }) {
       <div className="text-[10px] uppercase tracking-wide text-slate-400">{label}</div>
       <div className="text-sm font-semibold text-slate-800">{value}</div>
     </div>
+  );
+}
+
+function YearRow({
+  label,
+  values,
+  lineId,
+  isOverridden,
+  onSet,
+  onClear,
+}: {
+  label: string;
+  values: number[];
+  lineId: string;
+  isOverridden: (lineId: string, year: number) => boolean;
+  onSet: (lineId: string, year: number, value: number) => void;
+  onClear: (lineId: string, year: number) => void;
+}) {
+  return (
+    <tr className="border-t border-slate-50">
+      <td className="py-1 pr-2 text-left text-slate-700">{label}</td>
+      {values.map((v, idx) => {
+        const year = idx + 1;
+        const over = isOverridden(lineId, year);
+        return (
+          <td key={year} className="py-1 pl-1 text-right">
+            <div className="relative inline-flex items-center">
+              <input
+                type="number"
+                value={Math.round(v)}
+                onChange={(e) => onSet(lineId, year, Number(e.target.value))}
+                className={`w-20 rounded border py-0.5 pl-1 pr-1 text-right text-xs tabular-nums focus:outline-none ${over ? 'border-amber-400 bg-amber-50 font-semibold text-amber-800' : 'border-slate-200 text-slate-600'}`}
+              />
+              {over && <button onClick={() => onClear(lineId, year)} className="ml-0.5 text-[10px] text-amber-500 hover:text-red-500" title="Revert to calculated">✕</button>}
+            </div>
+          </td>
+        );
+      })}
+    </tr>
   );
 }
 
