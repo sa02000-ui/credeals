@@ -1,6 +1,7 @@
 'use client';
 
 import { useApp } from '@/lib/store';
+import { InfoTip } from '@/components/InfoTip';
 import { ASSET_CLASSES, pct, usd, type AssetClass } from '@/lib/sim';
 
 const ALL_STATES = ['TX', 'AZ', 'FL', 'GA', 'NC', 'TN'];
@@ -26,8 +27,8 @@ export function BuyBoxPanel() {
   return (
     <section className={`rounded-xl border bg-white p-4 ${buyBoxApproved ? 'border-emerald-300' : 'border-slate-200'}`}>
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-slate-900">
-          Step 1 · Your Buy Box {buyBoxApproved && <span className="text-emerald-600">✓</span>}
+        <h2 className="flex items-center gap-1 text-sm font-semibold text-slate-900">
+          Step 1 · Your Buy Box <InfoTip k="step.buybox" /> {buyBoxApproved && <span className="text-emerald-600">✓</span>}
         </h2>
         {buyBoxApproved && (
           <button onClick={editBuyBox} className="text-xs text-slate-500 underline hover:text-slate-900">
@@ -42,7 +43,7 @@ export function BuyBoxPanel() {
       <fieldset disabled={locked} className={`mt-3 space-y-3 ${locked ? 'opacity-70' : ''}`}>
         {/* Asset class */}
         <div>
-          <label className="text-xs font-medium text-slate-600">Asset class</label>
+          <label className="flex items-center gap-1 text-xs font-medium text-slate-600">Asset class <InfoTip k="bb.assetClass" /></label>
           <div className="mt-1 flex flex-wrap gap-1.5">
             {ASSET_CLASSES.map((a) => {
               const on = buyBox.assetClasses.includes(a.id);
@@ -70,7 +71,7 @@ export function BuyBoxPanel() {
 
         {/* States */}
         <div>
-          <label className="text-xs font-medium text-slate-600">Target states</label>
+          <label className="flex items-center gap-1 text-xs font-medium text-slate-600">Target states <InfoTip k="bb.states" /></label>
           <div className="mt-1 flex flex-wrap gap-1.5">
             {ALL_STATES.map((s) => (
               <button
@@ -88,7 +89,7 @@ export function BuyBoxPanel() {
           </div>
         </div>
 
-        <Row label="Units" value={`${buyBox.minUnits}–${buyBox.maxUnits}`}>
+        <Row label="Units" info="bb.units" value={`${buyBox.minUnits}–${buyBox.maxUnits}`}>
           <RangePair
             min={buyBox.minUnits}
             max={buyBox.maxUnits}
@@ -97,7 +98,7 @@ export function BuyBoxPanel() {
           />
         </Row>
 
-        <Row label="Year built" value={`${buyBox.minVintage}–${buyBox.maxVintage}`}>
+        <Row label="Year built" info="bb.vintage" value={`${buyBox.minVintage}–${buyBox.maxVintage}`}>
           <RangePair
             min={buyBox.minVintage}
             max={buyBox.maxVintage}
@@ -106,7 +107,7 @@ export function BuyBoxPanel() {
           />
         </Row>
 
-        <Row label="Price" value={`${usd(buyBox.minPrice, { compact: true })}–${usd(buyBox.maxPrice, { compact: true })}`}>
+        <Row label="Price" info="bb.price" value={`${usd(buyBox.minPrice, { compact: true })}–${usd(buyBox.maxPrice, { compact: true })}`}>
           <RangePair
             min={buyBox.minPrice}
             max={buyBox.maxPrice}
@@ -116,7 +117,7 @@ export function BuyBoxPanel() {
           />
         </Row>
 
-        <Row label="Min stabilized cap" value={pct(buyBox.minStabilizedCapRate)}>
+        <Row label="Min stabilized cap" info="bb.cap" value={pct(buyBox.minStabilizedCapRate)}>
           <input
             type="range"
             min={0.04}
@@ -141,11 +142,11 @@ export function BuyBoxPanel() {
   );
 }
 
-function Row({ label, value, children }: { label: string; value: string; children: React.ReactNode }) {
+function Row({ label, value, children, info }: { label: string; value: string; children: React.ReactNode; info?: string }) {
   return (
     <div>
       <div className="flex items-center justify-between">
-        <label className="text-xs font-medium text-slate-600">{label}</label>
+        <label className="flex items-center gap-1 text-xs font-medium text-slate-600">{label}{info && <InfoTip k={info} />}</label>
         <span className="text-xs font-semibold text-slate-900">{value}</span>
       </div>
       <div className="mt-1">{children}</div>

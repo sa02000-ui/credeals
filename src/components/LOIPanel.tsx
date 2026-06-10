@@ -2,6 +2,8 @@
 
 import { useMemo, useState } from 'react';
 import { useApp } from '@/lib/store';
+import { InfoTip } from '@/components/InfoTip';
+import { downloadDoc, downloadPdf } from '@/lib/export/docExport';
 import { dealCounterparties, resolveOffer, usd, type MarketDeal, type OfferOutcome } from '@/lib/sim';
 
 type CloseFrom = 'dd' | 'psa';
@@ -13,11 +15,17 @@ interface LOIForm {
   emdAmount: number;
   emdDays: number;
   ddDays: number;
+  ddGoHardDay: number; // day the EMD becomes non-refundable
   closeDays: number;
   closeFrom: CloseFrom;
   financing: Financing;
   offerExpDays: number;
   titleSellerExpense: boolean;
+  // extensions
+  extensionsEnabled: boolean;
+  extensionCount: number;
+  extensionDays: number;
+  extensionFee: number; // additional EMD per extension
 }
 
 const DD_DOCS = [
@@ -42,6 +50,13 @@ function buildLOI(deal: MarketDeal, f: LOIForm): string {
     f.financing === 'new'
       ? 'Purchaser intends to obtain new financing. This LOI and the resulting PSA are contingent upon Purchaser obtaining a satisfactory loan commitment within the financing-contingency period.'
       : "Purchaser intends to assume the Seller's existing loan, subject to lender approval and assumption terms.";
+  const goHardText =
+    f.ddGoHardDay > 0
+      ? `The Earnest Money Deposit shall become non-refundable ("go hard") on day ${f.ddGoHardDay} following the effective date of the PSA, except in the event of a Seller default.`
+      : 'The Earnest Money Deposit shall remain refundable through the expiration of the Due Diligence period.';
+  const extensionText = f.extensionsEnabled
+    ? `Purchaser shall have the right to ${f.extensionCount} extension(s) of the closing date, each of ${f.extensionDays} days, by depositing an additional ${usd(f.extensionFee)} of Earnest Money (non-refundable and applicable to the Purchase Price) prior to each extension.`
+    : 'No closing extensions are contemplated.';
   const today = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 
   return `${today}
@@ -62,7 +77,10 @@ EARNEST MONEY DEPOSIT
 ${usd(f.emdAmount)} (${((f.emdAmount / Math.max(1, f.purchasePrice)) * 100).toFixed(1)}% of Purchase Price), due ${f.emdDays} days after execution of the PSA, held by the title company and applicable to the Purchase Price at closing.
 
 DUE DILIGENCE
-Purchaser shall be granted ${f.ddDays} days of due diligence from the effective date of the PSA, during which Purchaser may terminate for any reason and receive a full refund of the Earnest Money Deposit.
+Purchaser shall be granted ${f.ddDays} days of due diligence from the effective date of the PSA, during which Purchaser may terminate for any reason and receive a full refund of the Earnest Money Deposit. ${goHardText}
+
+CLOSING EXTENSIONS
+${extensionText}
 
 TITLE INSURANCE
 ${f.titleSellerExpense ? "At Seller's expense, Seller shall deliver an owner's title policy in the amount of the Purchase Price." : "Title insurance at Purchaser's expense."}
@@ -100,11 +118,16 @@ export function LOIPanel({ deal }: { deal: MarketDeal }) {
     emdAmount: Math.round(deal.askPrice * 0.01),
     emdDays: 3,
     ddDays: 30,
+    ddGoHardDay: 30,
     closeDays: 30,
     closeFrom: 'dd',
     financing: 'new',
     offerExpDays: 5,
     titleSellerExpense: true,
+    extensionsEnabled: true,
+    extensionCount: 2,
+    extensionDays: 15,
+    extensionFee: Math.round(deal.askPrice * 0.005),
   });
   const set = (patch: Partial<LOIForm>) => setF((s) => ({ ...s, ...patch }));
 
@@ -170,12 +193,14 @@ export function LOIPanel({ deal }: { deal: MarketDeal }) {
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <Text label="Purchaser entity" value={f.entity} onChange={(v) => set({ entity: v })} />
           <Money label="Purchase price" v={f.purchasePrice} step={100_000} onChange={(v) => set({ purchasePrice: v })} />
-          <Money label="Earnest money" v={f.emdAmount} step={5_000} onChange={(v) => set({ emdAmount: v })} />
+          <Money label="Earnest money" info="loi.emd" v={f.emdAmount} step={5_000} onChange={(v) => set({ emdAmount: v })} />
           <Num label="EMD due (days after PSA)" v={f.emdDays} onChange={(v) => set({ emdDays: v })} />
-          <Num label="Due-diligence days" v={f.ddDays} onChange={(v) => set({ ddDays: v })} />
+          <Num label="Due-diligence days" info="loi.dd" v={f.ddDays} onChange={(v) => set({ ddDays: v })} />
+          <Num label="EMD goes hard (day)" info="loi.goHard" v={f.ddGoHardDay} onChange={(v) => set({ ddGoHardDay: v })} />
           <Num label="Closing days" v={f.closeDays} onChange={(v) => set({ closeDays: v })} />
           <Select
             label="Closing days counted from"
+            info="loi.closeFrom"
             value={f.closeFrom}
             onChange={(v) => set({ closeFrom: v as CloseFrom })}
             options={[
@@ -185,6 +210,7 @@ export function LOIPanel({ deal }: { deal: MarketDeal }) {
           />
           <Select
             label="Financing"
+            info="f.newLoan"
             value={f.financing}
             onChange={(v) => set({ financing: v as Financing })}
             options={[
@@ -193,6 +219,22 @@ export function LOIPanel({ deal }: { deal: MarketDeal }) {
             ]}
           />
           <Num label="Offer expiration (business days)" v={f.offerExpDays} onChange={(v) => set({ offerExpDays: v })} />
+        </div>
+
+        {/* Extensions */}
+        <div className="mt-3 rounded-lg border border-slate-200">
+          <label className="flex cursor-pointer items-center gap-2 px-3 py-2">
+            <input type="checkbox" checked={f.extensionsEnabled} onChange={(e) => set({ extensionsEnabled: e.target.checked })} className="h-4 w-4 rounded border-slate-300" />
+            <span className="text-sm font-medium text-slate-700">Closing extensions</span>
+            <InfoTip k="loi.extensions" />
+          </label>
+          {f.extensionsEnabled && (
+            <div className="grid grid-cols-1 gap-3 border-t border-slate-100 p-3 sm:grid-cols-3">
+              <Num label="Number of extensions" v={f.extensionCount} onChange={(v) => set({ extensionCount: v })} />
+              <Num label="Days per extension" v={f.extensionDays} onChange={(v) => set({ extensionDays: v })} />
+              <Money label="Added EMD per extension" v={f.extensionFee} step={5_000} onChange={(v) => set({ extensionFee: v })} />
+            </div>
+          )}
         </div>
         <p className="mt-2 text-[11px] text-slate-500">
           EMD is {((f.emdAmount / Math.max(1, f.purchasePrice)) * 100).toFixed(1)}% of price. Editing a term regenerates the draft (unless you&apos;ve hand-edited below).
@@ -252,8 +294,14 @@ export function LOIPanel({ deal }: { deal: MarketDeal }) {
                 Revert to generated
               </button>
             )}
+            <button onClick={() => downloadDoc(text, `LOI - ${deal.name}`)} className="rounded-md border border-sky-300 bg-sky-50 px-2 py-1 text-xs font-medium text-sky-700 hover:bg-sky-100">
+              ⬇ Word
+            </button>
+            <button onClick={() => downloadPdf(text, `LOI - ${deal.name}`)} className="rounded-md border border-red-300 bg-red-50 px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-100">
+              ⬇ PDF
+            </button>
             <button onClick={download} className="rounded-md border border-slate-300 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100">
-              Download .txt
+              .txt
             </button>
             <button onClick={() => navigator.clipboard?.writeText(text)} className="rounded-md border border-slate-300 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100">
               Copy
@@ -286,10 +334,10 @@ function Text({ label, value, onChange }: { label: string; value: string; onChan
   );
 }
 
-function Money({ label, v, onChange, step = 1 }: { label: string; v: number; onChange: (n: number) => void; step?: number }) {
+function Money({ label, v, onChange, step = 1, info }: { label: string; v: number; onChange: (n: number) => void; step?: number; info?: string }) {
   return (
     <label className="block">
-      <span className="text-[11px] text-slate-500">{label}</span>
+      <span className="flex items-center gap-1 text-[11px] text-slate-500">{label}{info && <InfoTip k={info} />}</span>
       <div className="relative">
         <span className="pointer-events-none absolute left-2 top-1.5 text-xs text-slate-400">$</span>
         <input type="number" value={v} step={step} onChange={(e) => onChange(Number(e.target.value))}
@@ -299,20 +347,20 @@ function Money({ label, v, onChange, step = 1 }: { label: string; v: number; onC
   );
 }
 
-function Num({ label, v, onChange }: { label: string; v: number; onChange: (n: number) => void }) {
+function Num({ label, v, onChange, info }: { label: string; v: number; onChange: (n: number) => void; info?: string }) {
   return (
     <label className="block">
-      <span className="text-[11px] text-slate-500">{label}</span>
+      <span className="flex items-center gap-1 text-[11px] text-slate-500">{label}{info && <InfoTip k={info} />}</span>
       <input type="number" value={v} onChange={(e) => onChange(Number(e.target.value))}
         className="w-full rounded-md border border-slate-300 px-2 py-1 text-sm tabular-nums focus:border-slate-900 focus:outline-none" />
     </label>
   );
 }
 
-function Select({ label, value, onChange, options }: { label: string; value: string; onChange: (v: string) => void; options: [string, string][] }) {
+function Select({ label, value, onChange, options, info }: { label: string; value: string; onChange: (v: string) => void; options: [string, string][]; info?: string }) {
   return (
     <label className="block">
-      <span className="text-[11px] text-slate-500">{label}</span>
+      <span className="flex items-center gap-1 text-[11px] text-slate-500">{label}{info && <InfoTip k={info} />}</span>
       <select value={value} onChange={(e) => onChange(e.target.value)}
         className="w-full rounded-md border border-slate-300 px-2 py-1 text-sm focus:border-slate-900 focus:outline-none">
         {options.map(([v, l]) => (

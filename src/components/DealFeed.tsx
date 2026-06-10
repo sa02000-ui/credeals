@@ -126,10 +126,15 @@ function DealRow({
                   e.stopPropagation();
                   onOpenConversation();
                 }}
-                className="inline-flex cursor-pointer items-center gap-0.5 rounded-full border border-slate-200 px-1 text-[10px] text-slate-400 hover:border-sky-300 hover:text-sky-600"
+                className={`inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-full border px-2 py-0.5 text-sm transition ${
+                  comments.length > 0
+                    ? 'border-sky-300 bg-sky-50 text-sky-700 hover:bg-sky-100'
+                    : 'border-slate-200 text-slate-400 hover:border-sky-300 hover:text-sky-600'
+                }`}
                 title="Open deal conversation"
               >
-                💬{comments.length > 0 && <span className="font-semibold text-slate-600">{comments.length}</span>}
+                <span className="text-base leading-none">💬</span>
+                {comments.length > 0 && <span className="font-semibold tabular-nums">{comments.length}</span>}
               </span>
               {deal.custom && (
                 <span className="rounded bg-indigo-100 px-1 text-[10px] font-medium text-indigo-700">yours</span>

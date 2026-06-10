@@ -9,7 +9,8 @@ import { AddDealModal } from '@/components/AddDealModal';
 import { ConversationPanel } from '@/components/ConversationPanel';
 import { CareerHud } from '@/components/CareerHud';
 import { useApp } from '@/lib/store';
-import type { DealStage } from '@/lib/sim';
+import { InfoTip } from '@/components/InfoTip';
+import { stageDef } from '@/lib/sim';
 
 function scrollTo(id: string) {
   document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -29,14 +30,16 @@ export default function Home() {
     if (typeof window !== 'undefined' && window.innerWidth < 1024) setTimeout(() => scrollTo('nav-napkin'), 50);
   }
 
-  const stageToIdx: Record<DealStage, number> = { new: 2, napkin: 2, detailed: 3, loi: 4, c2c: 5, am: 6, archived: 2 };
-  const currentStep = !buyBoxApproved ? 0 : !selected ? 1 : stageToIdx[statusOf(selected.id)];
+  const currentStep = !buyBoxApproved ? 0 : !selected ? 1 : 2;
+  const dealPhaseLabel = selected ? stageDef(statusOf(selected.id)).label : null;
 
   return (
     <>
       <TopBar />
       <LifecycleNav
         current={currentStep}
+        dealName={selected?.name ?? null}
+        dealPhase={dealPhaseLabel}
         onNav={(i) => scrollTo(i === 0 ? 'nav-buybox' : i === 1 ? 'nav-feed' : 'nav-napkin')}
       />
 
@@ -83,36 +86,61 @@ export default function Home() {
   );
 }
 
-const LIFECYCLE = ['Buy Box', 'Pick a Deal', 'Napkin UW', 'Detailed UW', 'LOI', 'Contract to Close', 'Asset Mgmt'];
+const LIFECYCLE: { label: string; info: string }[] = [
+  { label: 'Buy Box', info: 'step.buybox' },
+  { label: 'Pick a Deal', info: 'step.pick' },
+  { label: 'Work the Deal', info: 'step.napkin' },
+];
 
-function LifecycleNav({ current, onNav }: { current: number; onNav: (i: number) => void }) {
+function LifecycleNav({
+  current,
+  dealName,
+  dealPhase,
+  onNav,
+}: {
+  current: number;
+  dealName: string | null;
+  dealPhase: string | null;
+  onNav: (i: number) => void;
+}) {
   return (
     <nav className="border-b border-indigo-800 bg-gradient-to-r from-indigo-700 to-indigo-600">
-      <div className="mx-auto flex max-w-7xl items-center gap-0.5 overflow-x-auto px-4 py-3 text-base text-white">
-        {LIFECYCLE.map((label, i) => {
+      <div className="mx-auto flex max-w-7xl items-center gap-1 overflow-x-auto px-4 py-3 text-base text-white">
+        {LIFECYCLE.map((step, i) => {
           const active = i === current;
           const done = i < current;
+          const showDeal = i === 2 && dealName;
           return (
-            <div key={label} className="flex shrink-0 items-center">
-              <button
-                onClick={() => onNav(i)}
+            <div key={step.label} className="flex shrink-0 items-center">
+              <span
                 className={`flex items-center gap-2 rounded-lg px-3 py-1.5 transition ${
                   active ? 'bg-white font-semibold text-indigo-700 shadow-sm' : 'text-indigo-100 hover:bg-white/10'
                 }`}
               >
-                <span
-                  className={`grid h-6 w-6 place-items-center rounded-full text-xs font-bold ${
-                    done ? 'bg-emerald-400 text-white' : active ? 'bg-indigo-700 text-white' : 'bg-white/20 text-white'
-                  }`}
-                >
-                  {done ? '✓' : i + 1}
-                </span>
-                {label}
-              </button>
+                <button onClick={() => onNav(i)} className="flex items-center gap-2">
+                  <span
+                    className={`grid h-6 w-6 place-items-center rounded-full text-xs font-bold ${
+                      done ? 'bg-emerald-400 text-white' : active ? 'bg-indigo-700 text-white' : 'bg-white/20 text-white'
+                    }`}
+                  >
+                    {done ? '✓' : i + 1}
+                  </span>
+                  {showDeal ? (
+                    <span className="flex items-center gap-1.5">
+                      {dealName}
+                      {dealPhase && <span className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${active ? 'bg-indigo-100 text-indigo-700' : 'bg-white/15 text-white'}`}>{dealPhase}</span>}
+                    </span>
+                  ) : (
+                    step.label
+                  )}
+                </button>
+                <InfoTip k={step.info} />
+              </span>
               {i < LIFECYCLE.length - 1 && <span className="mx-0.5 text-indigo-300">›</span>}
             </div>
           );
         })}
+        <span className="ml-auto hidden text-xs text-indigo-200 sm:block">Pick a deal → its lifecycle (Napkin → Asset Mgmt) shows in the workspace below.</span>
       </div>
     </nav>
   );

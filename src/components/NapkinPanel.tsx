@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useApp } from '@/lib/store';
+import { InfoTip } from '@/components/InfoTip';
 import {
   analyzeDeal,
   assetConfig,
@@ -66,9 +67,10 @@ export function NapkinPanel({
         ))}
         <button
           onClick={onOpenConversation}
-          className="ml-auto rounded-md border border-slate-300 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100"
+          className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-sky-300 bg-sky-50 px-3 py-1.5 text-sm font-medium text-sky-700 hover:bg-sky-100"
         >
-          💬 {commentsOf(deal.id).length}
+          <span className="text-base leading-none">💬</span> Conversation
+          {commentsOf(deal.id).length > 0 && <span className="rounded-full bg-sky-600 px-1.5 text-xs font-semibold text-white tabular-nums">{commentsOf(deal.id).length}</span>}
         </button>
       </div>
 
@@ -129,15 +131,15 @@ export function NapkinPanel({
             </button>
           )}
         </div>
-        <Field label="Offer price" value={eff.offerPrice} step={100_000} onChange={(v) => set({ offerPrice: v })} money wide />
+        <Field label="Offer price" info="m.offerPrice" value={eff.offerPrice} step={100_000} onChange={(v) => set({ offerPrice: v })} money wide />
         <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="rounded-lg border border-slate-200 p-3">
             <div className="mb-2 text-xs font-semibold text-slate-600">Current (from financials)</div>
             <div className="grid grid-cols-2 gap-x-4 gap-y-2">
-              <Field label="In-place rent /mo" value={eff.avgInPlaceRent} onChange={(v) => set({ avgInPlaceRent: v })} money />
-              <Field label={`Exp /${cfg.unitNoun}/yr`} value={eff.currentExpensePerUnit} step={100} onChange={(v) => set({ currentExpensePerUnit: v })} money />
-              <PctField label="Walk-in cap" value={eff.walkInCapRate} onChange={(v) => set({ walkInCapRate: v })} />
-              <PctField label="Vacancy" value={eff.currentVacancy} onChange={(v) => set({ currentVacancy: v })} />
+              <Field label="In-place rent /mo" info="m.inPlaceRent" value={eff.avgInPlaceRent} onChange={(v) => set({ avgInPlaceRent: v })} money />
+              <Field label={`Exp /${cfg.unitNoun}/yr`} info="m.expensePerUnit" value={eff.currentExpensePerUnit} step={100} onChange={(v) => set({ currentExpensePerUnit: v })} money />
+              <PctField label="Walk-in cap" info="m.walkInCap" value={eff.walkInCapRate} onChange={(v) => set({ walkInCapRate: v })} />
+              <PctField label="Vacancy" info="m.vacancy" value={eff.currentVacancy} onChange={(v) => set({ currentVacancy: v })} />
             </div>
             <div className="mt-2 rounded bg-slate-50 px-2 py-1 text-[11px] text-slate-600">
               → Implied current expense ratio: <b>{pct(r.current.expenseRatio)}</b>
@@ -146,10 +148,10 @@ export function NapkinPanel({
           <div className="rounded-lg border border-emerald-200 bg-emerald-50/40 p-3">
             <div className="mb-2 text-xs font-semibold text-emerald-700">Proforma (your plan)</div>
             <div className="grid grid-cols-2 gap-x-4 gap-y-2">
-              <Field label="Market rent /mo" value={eff.avgMarketRent} onChange={(v) => set({ avgMarketRent: v })} money />
-              <PctField label="Stabilized vacancy" value={eff.stabilizedVacancy} onChange={(v) => set({ stabilizedVacancy: v })} />
-              <PctField label="Proforma exp ratio" value={eff.proformaExpenseRatio} onChange={(v) => set({ proformaExpenseRatio: v })} />
-              <PctField label="Valuation cap" value={eff.stabilizedCapRate} onChange={(v) => set({ stabilizedCapRate: v })} />
+              <Field label="Market rent /mo" info="m.marketRent" value={eff.avgMarketRent} onChange={(v) => set({ avgMarketRent: v })} money />
+              <PctField label="Stabilized vacancy" info="m.vacancy" value={eff.stabilizedVacancy} onChange={(v) => set({ stabilizedVacancy: v })} />
+              <PctField label="Proforma exp ratio" info="m.expenseRatio" value={eff.proformaExpenseRatio} onChange={(v) => set({ proformaExpenseRatio: v })} />
+              <PctField label="Valuation cap" info="m.stabilizedCap" value={eff.stabilizedCapRate} onChange={(v) => set({ stabilizedCapRate: v })} />
             </div>
             <div className="mt-2 rounded bg-emerald-50 px-2 py-1 text-[11px] text-emerald-800">
               → Proforma value: <b>{usd(r.proforma.valueAtCap, { compact: true })}</b> at {pct(eff.stabilizedCapRate)} cap
@@ -178,12 +180,12 @@ export function NapkinPanel({
 
         <div className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-4">
           {eff.financingType === 'new' ? (
-            <PctField label="LTV" value={eff.ltv} onChange={(v) => set({ ltv: v })} />
+            <PctField label="LTV" info="f.ltv" value={eff.ltv} onChange={(v) => set({ ltv: v })} />
           ) : (
-            <Field label="Assumed loan $" value={eff.assumedLoanAmount} step={100_000} onChange={(v) => set({ assumedLoanAmount: v })} money />
+            <Field label="Assumed loan $" info="f.assumption" value={eff.assumedLoanAmount} step={100_000} onChange={(v) => set({ assumedLoanAmount: v })} money />
           )}
-          <PctField label="Interest rate" value={eff.interestRate} onChange={(v) => set({ interestRate: v })} />
-          <Field label="Amort (months)" value={eff.amortMonths} step={12} onChange={(v) => set({ amortMonths: v })} />
+          <PctField label="Interest rate" info="f.interestRate" value={eff.interestRate} onChange={(v) => set({ interestRate: v })} />
+          <Field label="Amort (months)" info="f.amort" value={eff.amortMonths} step={12} onChange={(v) => set({ amortMonths: v })} />
         </div>
 
         <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -196,7 +198,7 @@ export function NapkinPanel({
           <Stat label="Effective LTV" value={pct(r.financing.ltv)} />
         </div>
         <div className="mt-2 flex items-baseline gap-2">
-          <span className="text-xs text-slate-500">DSCR (stabilized):</span>
+          <span className="flex items-center gap-1 text-xs text-slate-500">DSCR (stabilized): <InfoTip k="m.dscr" /></span>
           <span className={`text-lg font-bold ${r.financing.financeable ? 'text-emerald-600' : 'text-red-600'}`}>
             {r.financing.dscr.toFixed(2)}
           </span>
@@ -233,7 +235,7 @@ export function NapkinPanel({
           </tbody>
         </table>
         <div className="mt-3 rounded-lg bg-slate-50 p-3">
-          <div className="text-xs font-semibold text-slate-600">Affordability</div>
+          <div className="flex items-center gap-1 text-xs font-semibold text-slate-600">Affordability <InfoTip k="m.affordability" /></div>
           <div className="mt-1 text-sm text-slate-700">
             Avg local household can afford <b>{usd2(r.affordableRent)}</b>/mo · your proforma rent {usd2(eff.avgMarketRent)} ·{' '}
             <span className={eff.avgMarketRent <= r.affordableRent ? 'text-emerald-600' : 'text-amber-600'}>
@@ -301,6 +303,7 @@ function FilesSection({
     RentRoll: 'bg-violet-100 text-violet-700',
     OM: 'bg-amber-100 text-amber-700',
     CoStar: 'bg-sky-100 text-sky-700',
+    PSA: 'bg-emerald-100 text-emerald-700',
     Other: 'bg-slate-100 text-slate-600',
   };
   return (
@@ -453,10 +456,10 @@ function Verdict({ s }: { s: NapkinScenarioOutput }) {
   return <span className={`font-semibold ${tone}`}>{label}</span>;
 }
 
-function Field({ label, value, onChange, step = 1, money, wide }: { label: string; value: number; onChange: (v: number) => void; step?: number; money?: boolean; wide?: boolean }) {
+function Field({ label, value, onChange, step = 1, money, wide, info }: { label: string; value: number; onChange: (v: number) => void; step?: number; money?: boolean; wide?: boolean; info?: string }) {
   return (
     <label className={`block ${wide ? 'max-w-xs' : ''}`}>
-      <span className="text-[11px] font-medium text-slate-500">{label}</span>
+      <span className="flex items-center gap-1 text-[11px] font-medium text-slate-500">{label}{info && <InfoTip k={info} />}</span>
       <div className="relative">
         {money && <span className="pointer-events-none absolute left-2 top-1.5 text-xs text-slate-400">$</span>}
         <input
@@ -471,10 +474,10 @@ function Field({ label, value, onChange, step = 1, money, wide }: { label: strin
   );
 }
 
-function PctField({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
+function PctField({ label, value, onChange, info }: { label: string; value: number; onChange: (v: number) => void; info?: string }) {
   return (
     <label className="block">
-      <span className="text-[11px] font-medium text-slate-500">{label}</span>
+      <span className="flex items-center gap-1 text-[11px] font-medium text-slate-500">{label}{info && <InfoTip k={info} />}</span>
       <div className="relative">
         <input
           type="number"
