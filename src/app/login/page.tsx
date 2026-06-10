@@ -28,9 +28,16 @@ export default function LoginPage() {
         if (error) throw error;
         window.location.href = '/app';
       } else {
-        const { error } = await supabase.auth.signUp({ email, password, options: { emailRedirectTo: redirectTo } });
+        const { data, error } = await supabase.auth.signUp({ email, password, options: { emailRedirectTo: redirectTo } });
         if (error) throw error;
-        setMsg({ kind: 'ok', text: 'Check your email to confirm your account, then sign in.' });
+        // Supabase returns an "obscured" user with no identities when the email is already
+        // registered — no email is sent in that case, so tell the user instead of "check email".
+        if (data.user && (data.user.identities?.length ?? 0) === 0) {
+          setMsg({ kind: 'err', text: 'An account with this email already exists — sign in instead (or use the magic link below).' });
+          setMode('signin');
+        } else {
+          setMsg({ kind: 'ok', text: 'Check your email to confirm your account, then sign in.' });
+        }
       }
     } catch (err) {
       setMsg({ kind: 'err', text: err instanceof Error ? err.message : 'Something went wrong.' });

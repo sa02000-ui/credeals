@@ -12,6 +12,8 @@ interface ProfileRow {
   is_admin: boolean;
   billable: boolean;
   created_at: string;
+  confirmed?: boolean;
+  deactivated?: boolean;
 }
 
 interface DealRow {
@@ -46,12 +48,18 @@ export default function AdminPage() {
   const load = useCallback(async () => {
     try {
       const sb = dataClient();
-      const [{ data: profs }, { data: dealRows }, { data: memberRows }] = await Promise.all([
-        sb.from('profiles').select('id,email,full_name,is_admin,billable,created_at').order('created_at'),
+      const [usersRes, { data: dealRows }, { data: memberRows }] = await Promise.all([
+        fetch('/api/admin').then((r) => r.json()).catch(() => null),
         sb.from('deals').select('id,name,stage').order('name'),
         sb.from('deal_members').select('deal_id,user_id,role'),
       ]);
-      setProfiles((profs ?? []) as unknown as ProfileRow[]);
+      if (usersRes?.ok) {
+        setProfiles(usersRes.users as ProfileRow[]);
+      } else {
+        // fall back to plain profiles when the service route is unavailable
+        const { data: profs } = await sb.from('profiles').select('id,email,full_name,is_admin,billable,created_at').order('created_at');
+        setProfiles((profs ?? []) as unknown as ProfileRow[]);
+      }
       setDeals((dealRows ?? []) as unknown as DealRow[]);
       setMembers((memberRows ?? []) as unknown as MemberRow[]);
     } catch {
@@ -99,9 +107,14 @@ export default function AdminPage() {
           <h1 className="text-xl font-bold">Admin console</h1>
           <p className="text-sm text-slate-500">Users, roles, and per-deal access.</p>
         </div>
-        <Link href="/app" className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-100">
-          ← Workspace
-        </Link>
+        <div className="flex gap-2">
+          <Link href="/admin/scenarios" className="rounded-lg border border-violet-300 bg-violet-50 px-3 py-1.5 text-sm font-semibold text-violet-700 hover:bg-violet-100">
+            🎬 Scenario Builder
+          </Link>
+          <Link href="/app" className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-100">
+            ← Workspace
+          </Link>
+        </div>
       </div>
 
       {msg && (
@@ -140,42 +153,76 @@ export default function AdminPage() {
                 <th className="px-4 py-2 text-left font-medium">Email</th>
                 <th className="px-4 py-2 text-left font-medium">Name</th>
                 <th className="px-4 py-2 text-left font-medium">Role</th>
-                <th className="px-4 py-2 text-left font-medium">Billable</th>
+                <th className="px-4 py-2 text-left font-medium">Plan</th>
+                <th className="px-4 py-2 text-left font-medium">Status</th>
                 <th className="px-4 py-2 text-left font-medium">Joined</th>
+                <th className="px-4 py-2 text-right font-medium">Actions</th>
               </tr>
             </thead>
             <tbody>
               {profiles === null && (
-                <tr><td colSpan={5} className="px-4 py-3 text-xs text-slate-400">Loading…</td></tr>
+                <tr><td colSpan={7} className="px-4 py-3 text-xs text-slate-400">Loading…</td></tr>
               )}
               {profiles?.map((p) => (
-                <tr key={p.id} className="border-t border-slate-50">
+                <tr key={p.id} className={`border-t border-slate-50 ${p.deactivated ? 'opacity-60' : ''}`}>
                   <td className="px-4 py-2">{p.email}</td>
                   <td className="px-4 py-2 text-slate-600">{p.full_name ?? '—'}</td>
                   <td className="px-4 py-2">
-                    <button
+                    <select
+                      value={p.is_admin ? 'admin' : 'member'}
                       disabled={busy === `role-${p.id}`}
-                      onClick={() => act(`role-${p.id}`, { action: 'set-role', userId: p.id, isAdmin: !p.is_admin })}
-                      title={p.is_admin ? 'Demote to member' : 'Promote to admin'}
-                      className={`rounded px-1.5 py-0.5 text-[11px] font-medium transition disabled:opacity-50 ${
-                        p.is_admin ? 'bg-violet-100 text-violet-700 hover:bg-violet-200' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                      }`}
+                      onChange={(e) => act(`role-${p.id}`, { action: 'set-role', userId: p.id, isAdmin: e.target.value === 'admin' })}
+                      className={`rounded-md border px-1.5 py-0.5 text-xs font-medium focus:outline-none disabled:opacity-50 ${p.is_admin ? 'border-violet-300 bg-violet-50 text-violet-700' : 'border-slate-200 bg-white text-slate-600'}`}
                     >
-                      {p.is_admin ? 'admin' : 'member'} ⇄
-                    </button>
+                      <option value="admin">admin</option>
+                      <option value="member">member</option>
+                    </select>
                   </td>
                   <td className="px-4 py-2">
-                    <button
+                    <select
+                      value={p.billable ? 'billable' : 'free'}
                       disabled={busy === `bill-${p.id}`}
-                      onClick={() => act(`bill-${p.id}`, { action: 'set-billable', userId: p.id, billable: !p.billable })}
-                      className={`rounded px-1.5 py-0.5 text-[11px] font-medium transition disabled:opacity-50 ${
-                        p.billable ? 'bg-amber-100 text-amber-700 hover:bg-amber-200' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                      }`}
+                      onChange={(e) => act(`bill-${p.id}`, { action: 'set-billable', userId: p.id, billable: e.target.value === 'billable' })}
+                      className={`rounded-md border px-1.5 py-0.5 text-xs font-medium focus:outline-none disabled:opacity-50 ${p.billable ? 'border-amber-300 bg-amber-50 text-amber-700' : 'border-slate-200 bg-white text-slate-600'}`}
                     >
-                      {p.billable ? 'billable' : 'free'} ⇄
-                    </button>
+                      <option value="billable">billable</option>
+                      <option value="free">free</option>
+                    </select>
+                  </td>
+                  <td className="px-4 py-2">
+                    <span className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${p.deactivated ? 'bg-red-100 text-red-700' : p.confirmed === false ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                      {p.deactivated ? 'deactivated' : p.confirmed === false ? 'unconfirmed' : 'active'}
+                    </span>
                   </td>
                   <td className="px-4 py-2 text-xs text-slate-500">{new Date(p.created_at).toLocaleDateString()}</td>
+                  <td className="px-4 py-2 text-right">
+                    <div className="flex justify-end gap-1.5">
+                      {p.deactivated ? (
+                        <button
+                          disabled={busy === `react-${p.id}`}
+                          onClick={() => act(`react-${p.id}`, { action: 'reactivate', userId: p.id })}
+                          className="rounded-md border border-emerald-300 px-2 py-0.5 text-[11px] font-medium text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
+                        >
+                          Reactivate
+                        </button>
+                      ) : (
+                        <button
+                          disabled={busy === `deact-${p.id}`}
+                          onClick={() => { if (confirm(`Deactivate ${p.email}? They can't sign in until reactivated; their data is kept.`)) void act(`deact-${p.id}`, { action: 'deactivate', userId: p.id }); }}
+                          className="rounded-md border border-amber-300 px-2 py-0.5 text-[11px] font-medium text-amber-700 hover:bg-amber-50 disabled:opacity-50"
+                        >
+                          Deactivate
+                        </button>
+                      )}
+                      <button
+                        disabled={busy === `del-${p.id}`}
+                        onClick={() => { if (confirm(`DELETE ${p.email}? This removes their account permanently — the email can sign up fresh afterwards.`)) void act(`del-${p.id}`, { action: 'delete-user', userId: p.id }); }}
+                        className="rounded-md border border-red-300 px-2 py-0.5 text-[11px] font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>

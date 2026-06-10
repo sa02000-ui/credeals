@@ -2,15 +2,47 @@ import { NextResponse } from 'next/server';
 import { requireAdmin, serviceClient } from '@/lib/supabase/admin';
 
 /**
- * Admin-only mutations that need to bypass RLS (profiles UPDATE is own-only; deal_members
- * insert needs to act as the grantor). Every action verifies the caller is an admin first.
+ * Admin-only operations that need the service role (bypass RLS / auth-admin API). Every call
+ * verifies the caller is an admin first.
  *
- * Actions:
+ * GET → list users (profiles merged with auth status: confirmed, deactivated/banned).
+ *
+ * POST actions:
  *  - set-role     { userId, isAdmin }       → profiles.is_admin
  *  - set-billable { userId, billable }      → profiles.billable
+ *  - deactivate   { userId }                → auth ban (can't sign in; data kept)
+ *  - reactivate   { userId }                → lift the ban
+ *  - delete-user  { userId }                → remove auth user + profile (email can sign up fresh)
  *  - assign-deal  { dealId, userId, role? } → upsert deal_members (default editor)
  *  - unassign-deal{ dealId, userId }        → delete deal_members
  */
+export async function GET() {
+  const adminId = await requireAdmin();
+  if (!adminId) return NextResponse.json({ ok: false, error: 'Forbidden' }, { status: 403 });
+  const sb = serviceClient();
+  try {
+    const [{ data: profs, error: pErr }, { data: authList, error: aErr }] = await Promise.all([
+      sb.from('profiles').select('id,email,full_name,is_admin,billable,created_at').order('created_at'),
+      sb.auth.admin.listUsers({ page: 1, perPage: 1000 }),
+    ]);
+    if (pErr) throw pErr;
+    if (aErr) throw aErr;
+    const authById = new Map((authList?.users ?? []).map((u) => [u.id, u]));
+    const users = (profs ?? []).map((p) => {
+      const au = authById.get(p.id) as { banned_until?: string | null; email_confirmed_at?: string | null } | undefined;
+      const bannedUntil = au?.banned_until ? new Date(au.banned_until) : null;
+      return {
+        ...p,
+        confirmed: !!au?.email_confirmed_at,
+        deactivated: !!bannedUntil && bannedUntil > new Date(),
+      };
+    });
+    return NextResponse.json({ ok: true, users });
+  } catch (e) {
+    return NextResponse.json({ ok: false, error: e instanceof Error ? e.message : 'Failed' }, { status: 500 });
+  }
+}
+
 export async function POST(request: Request) {
   const adminId = await requireAdmin();
   if (!adminId) {
@@ -41,6 +73,30 @@ export async function POST(request: Request) {
         if (!userId) return bad('userId required');
         const { error } = await sb.from('profiles').update({ billable: !!billable }).eq('id', userId);
         if (error) throw error;
+        return NextResponse.json({ ok: true });
+      }
+      case 'deactivate': {
+        const { userId } = body as { userId?: string };
+        if (!userId) return bad('userId required');
+        if (userId === adminId) return bad('You cannot deactivate yourself');
+        const { error } = await sb.auth.admin.updateUserById(userId, { ban_duration: '87600h' }); // ~10 years
+        if (error) throw error;
+        return NextResponse.json({ ok: true });
+      }
+      case 'reactivate': {
+        const { userId } = body as { userId?: string };
+        if (!userId) return bad('userId required');
+        const { error } = await sb.auth.admin.updateUserById(userId, { ban_duration: 'none' });
+        if (error) throw error;
+        return NextResponse.json({ ok: true });
+      }
+      case 'delete-user': {
+        const { userId } = body as { userId?: string };
+        if (!userId) return bad('userId required');
+        if (userId === adminId) return bad('You cannot delete yourself');
+        const { error } = await sb.auth.admin.deleteUser(userId);
+        if (error) throw error;
+        await sb.from('profiles').delete().eq('id', userId); // in case the FK doesn't cascade
         return NextResponse.json({ ok: true });
       }
       case 'assign-deal': {
