@@ -7,8 +7,13 @@ import { readCookieSession } from './supabase/token';
 import { listDeals, insertDeal, updateDealStage } from './data/deals';
 import {
   DEFAULT_BUY_BOX,
+  INITIAL_GAME,
   SEED_DEALS,
+  applyRep,
   treasuryBalance,
+  type GameState,
+  type MarketCondition,
+  type Reputation,
   type BuyBox,
   type CashEvent,
   type DealComment,
@@ -24,6 +29,17 @@ import {
 const STARTING_CASH = 250_000;
 const PURSUIT_COST = 7_500;
 
+/** A bundle of effects applied to the game state (cash, reputation, log, counters). */
+export interface GameOutcome {
+  repDelta?: Partial<Reputation>;
+  cashDelta?: number;
+  cashLabel?: string;
+  dealId?: string;
+  event?: { title: string; detail: string; lesson?: string };
+  closed?: boolean;
+  pursued?: boolean;
+}
+
 interface AppState {
   mode: SimMode;
   /** admin-only features (e.g. persona tuning). Comes from Supabase profile.is_admin later;
@@ -37,6 +53,7 @@ interface AppState {
   files: Record<string, DealFile[]>;
   treasury: TreasuryState;
   day: number;
+  game: GameState;
 }
 
 const INITIAL: AppState = {
@@ -50,6 +67,7 @@ const INITIAL: AppState = {
   files: {},
   treasury: { startingBalance: STARTING_CASH, events: [] },
   day: 1,
+  game: INITIAL_GAME,
 };
 
 interface AppContextValue extends AppState {
@@ -57,6 +75,8 @@ interface AppContextValue extends AppState {
   cashBalance: number;
   setMode: (m: SimMode) => void;
   setAdmin: (v: boolean) => void;
+  setMarket: (m: MarketCondition) => void;
+  applyGameOutcome: (o: GameOutcome) => void;
   updateBuyBox: (patch: Partial<BuyBox>) => void;
   approveBuyBox: () => void;
   editBuyBox: () => void;
@@ -75,7 +95,7 @@ interface AppContextValue extends AppState {
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
-const LS_KEY = 'cre-sim-state-v3';
+const LS_KEY = 'cre-sim-state-v4';
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<AppState>(INITIAL);
@@ -198,6 +218,36 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       cashBalance: treasuryBalance(state.treasury),
       setMode: (mode) => setState((s) => ({ ...s, mode })),
       setAdmin: (v) => setState((s) => ({ ...s, isAdmin: v })),
+      setMarket: (m) => setState((s) => ({ ...s, game: { ...s.game, market: m } })),
+      applyGameOutcome: (o) =>
+        setState((s) => {
+          const treasuryEvents = [...s.treasury.events];
+          if (o.cashDelta) {
+            treasuryEvents.push({
+              id: `game-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+              day: s.day,
+              label: o.cashLabel ?? o.event?.title ?? 'Game event',
+              amount: o.cashDelta,
+            });
+          }
+          const log = o.event
+            ? [
+                { id: `ev-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, ts: Date.now(), dealId: o.dealId, ...o.event },
+                ...s.game.log,
+              ].slice(0, 50)
+            : s.game.log;
+          return {
+            ...s,
+            treasury: { ...s.treasury, events: treasuryEvents },
+            game: {
+              ...s.game,
+              reputation: o.repDelta ? applyRep(s.game.reputation, o.repDelta) : s.game.reputation,
+              dealsClosed: s.game.dealsClosed + (o.closed ? 1 : 0),
+              dealsPursued: s.game.dealsPursued + (o.pursued ? 1 : 0),
+              log,
+            },
+          };
+        }),
       updateBuyBox: (patch) => setState((s) => ({ ...s, buyBox: { ...s.buyBox, ...patch } })),
       approveBuyBox: () => setState((s) => ({ ...s, buyBoxApproved: true })),
       editBuyBox: () => setState((s) => ({ ...s, buyBoxApproved: false })),

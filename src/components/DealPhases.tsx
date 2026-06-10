@@ -49,7 +49,7 @@ export function DealPhases({ deal, onOpenConversation }: { deal: MarketDeal; onO
       {phase === 'napkin' && <NapkinPanel deal={deal} onOpenConversation={onOpenConversation} />}
       {phase === 'detailed' && <DetailedUWPanel deal={deal} />}
       {phase === 'loi' && <LOIPanel deal={deal} />}
-      {phase === 'c2c' && <C2CPanel />}
+      {phase === 'c2c' && <C2CPanel deal={deal} />}
       {phase === 'am' && <AMPanel />}
     </div>
   );

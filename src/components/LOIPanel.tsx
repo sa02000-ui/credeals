@@ -1,7 +1,8 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { usd, type MarketDeal } from '@/lib/sim';
+import { useApp } from '@/lib/store';
+import { dealCounterparties, resolveOffer, usd, type MarketDeal, type OfferOutcome } from '@/lib/sim';
 
 type CloseFrom = 'dd' | 'psa';
 type Financing = 'new' | 'assumption';
@@ -111,6 +112,39 @@ export function LOIPanel({ deal }: { deal: MarketDeal }) {
   const [edited, setEdited] = useState<string | null>(null);
   const text = edited ?? generated;
 
+  // game-mode negotiation
+  const { mode, game, applyGameOutcome, setStatus } = useApp();
+  const { seller } = dealCounterparties(deal.id);
+  const [outcome, setOutcome] = useState<OfferOutcome | null>(null);
+
+  function submitOffer() {
+    const o = resolveOffer({
+      offerPrice: f.purchasePrice,
+      askPrice: deal.askPrice,
+      seller,
+      market: game.market,
+      brokerRep: game.reputation.broker,
+    });
+    setOutcome(o);
+    if (o.result === 'accepted') {
+      applyGameOutcome({
+        dealId: deal.id,
+        repDelta: { broker: o.repBrokerDelta },
+        cashDelta: -Math.round(f.emdAmount),
+        cashLabel: `Earnest money — ${deal.name}`,
+        event: { title: `Offer accepted: ${deal.name}`, detail: o.message, lesson: o.lesson },
+        pursued: true,
+      });
+      setStatus(deal.id, 'c2c');
+    } else {
+      applyGameOutcome({
+        dealId: deal.id,
+        repDelta: { broker: o.repBrokerDelta },
+        event: { title: `Offer ${o.result}: ${deal.name}`, detail: o.message, lesson: o.lesson },
+      });
+    }
+  }
+
   function download() {
     const blob = new Blob([text], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
@@ -164,6 +198,49 @@ export function LOIPanel({ deal }: { deal: MarketDeal }) {
           EMD is {((f.emdAmount / Math.max(1, f.purchasePrice)) * 100).toFixed(1)}% of price. Editing a term regenerates the draft (unless you&apos;ve hand-edited below).
         </p>
       </div>
+
+      {/* Game-mode: submit the offer to the seller persona */}
+      {mode === 'game' && (
+        <div className="border-b border-slate-100 bg-violet-50/40 p-4">
+          <h3 className="mb-1 text-sm font-semibold">🎭 Make the offer</h3>
+          <p className="mb-2 text-xs text-slate-600">
+            Seller: <b>{seller.name}</b> — {seller.blurb} <span className="text-violet-700">💡 {seller.tells[0]}</span>
+          </p>
+          <button onClick={submitOffer} className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-700">
+            Submit offer at {usd(f.purchasePrice, { compact: true })} →
+          </button>
+          {outcome && (
+            <div
+              className={`mt-3 rounded-lg border p-3 text-sm ${
+                outcome.result === 'accepted'
+                  ? 'border-emerald-200 bg-emerald-50'
+                  : outcome.result === 'countered'
+                    ? 'border-amber-200 bg-amber-50'
+                    : 'border-red-200 bg-red-50'
+              }`}
+            >
+              <div className="font-semibold">
+                {outcome.result === 'accepted' ? '✅ Accepted' : outcome.result === 'countered' ? '↔️ Countered' : '✕ Rejected'} — {outcome.message}
+              </div>
+              <div className="mt-1 text-xs text-slate-600">💡 {outcome.lesson}</div>
+              {outcome.result === 'countered' && outcome.counterPrice != null && (
+                <button
+                  onClick={() => {
+                    setF((s) => ({ ...s, purchasePrice: outcome.counterPrice! }));
+                    setOutcome(null);
+                  }}
+                  className="mt-2 rounded-md border border-amber-400 px-2 py-1 text-xs font-medium text-amber-800 hover:bg-amber-100"
+                >
+                  Accept counter at {usd(outcome.counterPrice, { compact: true })}
+                </button>
+              )}
+              {outcome.result === 'accepted' && (
+                <div className="mt-1 text-xs text-emerald-700">Advanced to Contract-to-Close. Earnest money is now at risk.</div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Generated, editable LOI */}
       <div className="p-4">

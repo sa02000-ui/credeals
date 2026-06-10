@@ -7,6 +7,7 @@ import { DealFeed } from '@/components/DealFeed';
 import { DealPhases } from '@/components/DealPhases';
 import { AddDealModal } from '@/components/AddDealModal';
 import { ConversationPanel } from '@/components/ConversationPanel';
+import { CareerHud } from '@/components/CareerHud';
 import { useApp } from '@/lib/store';
 import type { DealStage } from '@/lib/sim';
 
@@ -15,7 +16,7 @@ function scrollTo(id: string) {
 }
 
 export default function Home() {
-  const { deals, buyBoxApproved, statusOf, setStatus } = useApp();
+  const { deals, buyBoxApproved, statusOf, setStatus, mode } = useApp();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [convoId, setConvoId] = useState<string | null>(null);
@@ -38,6 +39,12 @@ export default function Home() {
         current={currentStep}
         onNav={(i) => scrollTo(i === 0 ? 'nav-buybox' : i === 1 ? 'nav-feed' : 'nav-napkin')}
       />
+
+      {mode === 'game' && buyBoxApproved && (
+        <div className="mx-auto w-full max-w-7xl px-4 pt-4">
+          <CareerHud />
+        </div>
+      )}
 
       <main className="mx-auto grid w-full max-w-7xl flex-1 gap-4 px-4 py-4 lg:grid-cols-[340px_minmax(0,1fr)]">
         <div className="space-y-4">

@@ -6,8 +6,9 @@
  * phase by phase. Each panel shows what it WILL do so the end-to-end flow is navigable now.
  */
 
+import { useState } from 'react';
 import { useApp } from '@/lib/store';
-import { usd, type MarketDeal } from '@/lib/sim';
+import { resolveCapitalRaise, usd, type MarketDeal, type RaiseOutcome } from '@/lib/sim';
 
 function PhaseShell({
   title,
@@ -132,7 +133,7 @@ export function LOIPanel({ deal }: { deal: MarketDeal }) {
   );
 }
 
-export function C2CPanel() {
+export function C2CPanel({ deal }: { deal: MarketDeal }) {
   // Critical-dates tasks from the real Contract-to-Close Gantt (functionality_maps §C).
   const tasks = [
     { label: 'LOI Accepted', meta: 'day 0' },
@@ -146,6 +147,44 @@ export function C2CPanel() {
     { label: 'Closing Docs + HUD', meta: '+7d' },
     { label: 'Close / Distribute Funds', meta: '+7d' },
   ];
+
+  // Game-mode capital raise: a ~35% equity check that the player raises solo or with partners.
+  const { mode, game, applyGameOutcome, setStatus, statusOf } = useApp();
+  const equityNeeded = Math.round(deal.askPrice * 0.35);
+  const [strategy, setStrategy] = useState<'solo' | 'partners'>('solo');
+  const [outcome, setOutcome] = useState<RaiseOutcome | null>(null);
+  const closed = statusOf(deal.id) === 'am' || statusOf(deal.id) === 'archived';
+
+  function runRaise(s: 'solo' | 'partners') {
+    const o = resolveCapitalRaise({
+      equityNeeded,
+      strategy: s,
+      market: game.market,
+      lpRep: game.reputation.lp,
+      dealsClosed: game.dealsClosed,
+    });
+    setOutcome(o);
+    if (o.success) {
+      applyGameOutcome({
+        dealId: deal.id,
+        repDelta: { lp: o.repLpDelta },
+        closed: true,
+        event: {
+          title: `Closed: ${deal.name}`,
+          detail: `${o.message} (${s === 'partners' ? 'with capital partners' : 'solo raise'})`,
+          lesson: o.lesson,
+        },
+      });
+      setStatus(deal.id, 'am');
+    } else {
+      applyGameOutcome({
+        dealId: deal.id,
+        repDelta: { lp: o.repLpDelta },
+        event: { title: `Raise short: ${deal.name}`, detail: o.message, lesson: o.lesson },
+      });
+    }
+  }
+
   return (
     <PhaseShell
       title="Contract to Close"
@@ -153,8 +192,81 @@ export function C2CPanel() {
       subtitle="A critical-dates project plan from PSA execution to closing — each task with a due date and owner."
     >
       <Checklist items={tasks} />
+
+      {mode === 'game' && (
+        <div className="mt-4 rounded-lg border border-violet-200 bg-violet-50/40 p-4">
+          <h3 className="text-sm font-semibold">🤝 Raise the equity</h3>
+          <p className="mt-1 text-xs text-slate-600">
+            This deal needs <b>{usd(equityNeeded, { compact: true })}</b> of equity (≈35% of price). Raise it
+            yourself or bring capital partners (wider reach, but you share the promote).
+          </p>
+
+          {closed ? (
+            <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">
+              ✅ Capital is in and the deal is closed — it&apos;s now in Asset Management.
+            </div>
+          ) : (
+            <>
+              <div className="mt-3 flex gap-2">
+                {(['solo', 'partners'] as const).map((s) => (
+                  <button
+                    key={s}
+                    onClick={() => setStrategy(s)}
+                    className={`rounded-lg border px-3 py-1.5 text-sm font-medium ${
+                      strategy === s
+                        ? 'border-violet-500 bg-violet-600 text-white'
+                        : 'border-slate-300 text-slate-700 hover:bg-slate-100'
+                    }`}
+                  >
+                    {s === 'solo' ? 'Raise solo' : 'Bring capital partners'}
+                  </button>
+                ))}
+                <button
+                  onClick={() => runRaise(strategy)}
+                  className="ml-auto rounded-lg bg-violet-600 px-4 py-1.5 text-sm font-semibold text-white hover:bg-violet-700"
+                >
+                  Launch the raise →
+                </button>
+              </div>
+
+              {outcome && (
+                <div
+                  className={`mt-3 rounded-lg border p-3 text-sm ${
+                    outcome.success ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'
+                  }`}
+                >
+                  <div className="font-semibold">
+                    {outcome.success ? '✅ Fully funded' : '⚠️ Short'} — {outcome.message}
+                  </div>
+                  <div className="mt-1 text-xs text-slate-500">
+                    Capacity {usd(outcome.capacity, { compact: true })} · raised {usd(outcome.raised, { compact: true })}
+                  </div>
+                  <div className="mt-1 text-xs text-slate-600">💡 {outcome.lesson}</div>
+                  {!outcome.success && outcome.recovery && (
+                    <div className="mt-2">
+                      <div className="text-xs text-amber-800">Recovery: {outcome.recovery}</div>
+                      {strategy === 'solo' && (
+                        <button
+                          onClick={() => {
+                            setStrategy('partners');
+                            runRaise('partners');
+                          }}
+                          className="mt-2 rounded-md border border-amber-400 px-2 py-1 text-xs font-medium text-amber-800 hover:bg-amber-100"
+                        >
+                          Bring in capital partners and re-raise
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
       <p className="mt-3 text-xs text-slate-500">
-        Live dates (driven from PSA date), task owners, the GP-team formation (capital raise / guarantor), and
+        Live dates (driven from PSA date), task owners, the full GP-team formation (guarantor / balance sheet), and
         recovery branches when a deadline slips wire here next.
       </p>
     </PhaseShell>
