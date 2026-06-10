@@ -6,7 +6,7 @@ import { usd } from '@/lib/sim';
 import { AuthStatus } from '@/components/AuthStatus';
 
 export function TopBar() {
-  const { mode, setMode, cashBalance, day, resetAll, isAdmin } = useApp();
+  const { mode, setMode, cashBalance, day, resetAll, isAdmin, difficulty, clockPaused, setClockPaused } = useApp();
   const low = cashBalance < 25_000;
 
   return (
@@ -46,11 +46,22 @@ export function TopBar() {
               </div>
             </div>
           )}
-          {/* Day — game mode only (no simulated time in real mode) */}
+          {/* Day + pausable clock — game mode only (no simulated time in real mode) */}
           {mode === 'game' && (
-            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-right">
-              <div className="text-[10px] uppercase tracking-wide text-slate-500">Day</div>
-              <div className="text-sm font-semibold">{day}</div>
+            <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1">
+              <div className="text-right">
+                <div className="text-[10px] uppercase tracking-wide text-slate-500">Day</div>
+                <div className="text-sm font-semibold tabular-nums">{day}</div>
+              </div>
+              {difficulty && (
+                <button
+                  onClick={() => setClockPaused(!clockPaused)}
+                  title={clockPaused ? 'Resume the clock' : 'Pause the clock'}
+                  className={`grid h-7 w-7 place-items-center rounded-md border text-sm ${clockPaused ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-amber-300 bg-amber-50 text-amber-700'}`}
+                >
+                  {clockPaused ? '▶' : '⏸'}
+                </button>
+              )}
             </div>
           )}
 

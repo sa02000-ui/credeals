@@ -10,6 +10,15 @@ import type { Persona } from './personas';
 
 export type MarketCondition = 'hot' | 'balanced' | 'tough';
 
+/** Difficulty / realism level, chosen at the start of a game (DESIGN §22 H). */
+export type Difficulty = 'guided' | 'standard' | 'expert';
+
+export const DIFFICULTY_INFO: Record<Difficulty, { label: string; blurb: string; startingCash: number }> = {
+  guided: { label: 'Guided', blurb: 'Coaching prompts + hints, generous capital, forgiving counterparties. Best for learning.', startingCash: 400_000 },
+  standard: { label: 'Standard', blurb: 'Objectives on, market-rate capital and personas. The intended experience.', startingCash: 250_000 },
+  expert: { label: 'Expert', blurb: 'No hints, tight capital, tougher sellers and more retrades. For pros.', startingCash: 150_000 },
+};
+
 export interface Reputation {
   broker: number; // 0–100
   lender: number;

@@ -11,6 +11,8 @@ import {
   SEED_DEALS,
   applyRep,
   treasuryBalance,
+  DIFFICULTY_INFO,
+  type Difficulty,
   type GameState,
   type MarketCondition,
   type Reputation,
@@ -56,7 +58,14 @@ interface AppState {
   treasury: TreasuryState;
   day: number;
   game: GameState;
+  /** game-run controls (DESIGN §22): difficulty chosen at start (null = not started), clock, resume cursor */
+  difficulty: Difficulty | null;
+  clockPaused: boolean;
+  selectedDealId: string | null;
 }
+
+const DAY_MS = 6000; // continuous clock: one simulated day every 6s while running
+const CARRY_PER_DAY = 250; // light daily carrying cost so time costs money
 
 const INITIAL: AppState = {
   mode: 'game',
@@ -71,6 +80,9 @@ const INITIAL: AppState = {
   treasury: { startingBalance: STARTING_CASH, events: [] },
   day: 1,
   game: INITIAL_GAME,
+  difficulty: null,
+  clockPaused: true,
+  selectedDealId: null,
 };
 
 interface AppContextValue extends AppState {
@@ -79,6 +91,9 @@ interface AppContextValue extends AppState {
   setMode: (m: SimMode) => void;
   setAdmin: (v: boolean) => void;
   setMarket: (m: MarketCondition) => void;
+  startGame: (d: Difficulty) => void;
+  setClockPaused: (v: boolean) => void;
+  setSelectedDeal: (id: string | null) => void;
   applyGameOutcome: (o: GameOutcome) => void;
   updateBuyBox: (patch: Partial<BuyBox>) => void;
   approveBuyBox: () => void;
@@ -145,6 +160,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       /* ignore */
     }
   }, [state, hydrated]);
+
+  // Continuous, pausable game clock (DESIGN §22 F): advances one simulated day every DAY_MS while
+  // in game mode, a difficulty is chosen, and the clock isn't paused. Pausing freezes it; the day
+  // persists so you resume where you left.
+  useEffect(() => {
+    if (!hydrated) return;
+    if (state.mode !== 'game' || !state.difficulty || state.clockPaused) return;
+    const t = setInterval(() => setState((s) => ({ ...s, day: s.day + 1 })), DAY_MS);
+    return () => clearInterval(t);
+  }, [hydrated, state.mode, state.difficulty, state.clockPaused]);
 
   // When Supabase is configured: load the signed-in user's profile (is_admin) + their deals.
   // Session/user identity comes from the cookie (see token.ts) to avoid the supabase-js
@@ -222,10 +247,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return {
       ...state,
       deals,
-      cashBalance: treasuryBalance(state.treasury),
+      cashBalance: treasuryBalance(state.treasury) - CARRY_PER_DAY * Math.max(0, state.day - 1),
       setMode: (mode) => setState((s) => ({ ...s, mode })),
       setAdmin: (v) => setState((s) => ({ ...s, isAdmin: v })),
       setMarket: (m) => setState((s) => ({ ...s, game: { ...s.game, market: m } })),
+      startGame: (d) =>
+        setState((s) => ({
+          ...s,
+          difficulty: d,
+          clockPaused: false,
+          treasury: { ...s.treasury, startingBalance: DIFFICULTY_INFO[d].startingCash },
+        })),
+      setClockPaused: (v) => setState((s) => ({ ...s, clockPaused: v })),
+      setSelectedDeal: (id) => setState((s) => ({ ...s, selectedDealId: id })),
       applyGameOutcome: (o) =>
         setState((s) => {
           const treasuryEvents = [...s.treasury.events];

@@ -8,6 +8,8 @@ import { DealPhases } from '@/components/DealPhases';
 import { AddDealModal } from '@/components/AddDealModal';
 import { ConversationPanel } from '@/components/ConversationPanel';
 import { CareerHud } from '@/components/CareerHud';
+import { GameStartModal } from '@/components/GameStartModal';
+import { ObjectiveHud } from '@/components/ObjectiveHud';
 import { useApp } from '@/lib/store';
 import { InfoTip } from '@/components/InfoTip';
 import { stageDef } from '@/lib/sim';
@@ -17,15 +19,16 @@ function scrollTo(id: string) {
 }
 
 export default function Home() {
-  const { deals, buyBoxApproved, statusOf, setStatus, mode } = useApp();
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const { deals, buyBoxApproved, statusOf, setStatus, mode, difficulty, selectedDealId, setSelectedDeal } = useApp();
+  const selectedId = selectedDealId;
   const [showAdd, setShowAdd] = useState(false);
   const [convoId, setConvoId] = useState<string | null>(null);
   const selected = deals.find((d) => d.id === selectedId) ?? null;
   const convoDeal = deals.find((d) => d.id === convoId) ?? null;
+  const gameNotStarted = mode === 'game' && difficulty === null;
 
   function selectDeal(id: string) {
-    setSelectedId(id);
+    setSelectedDeal(id);
     if (statusOf(id) === 'new') setStatus(id, 'napkin');
     if (typeof window !== 'undefined' && window.innerWidth < 1024) setTimeout(() => scrollTo('nav-napkin'), 50);
   }
@@ -42,6 +45,10 @@ export default function Home() {
         dealPhase={dealPhaseLabel}
         onNav={(i) => scrollTo(i === 0 ? 'nav-buybox' : i === 1 ? 'nav-feed' : 'nav-napkin')}
       />
+
+      {mode === 'game' && difficulty && (
+        <ObjectiveHud onNav={(t) => scrollTo(t === 'buybox' ? 'nav-buybox' : t === 'feed' ? 'nav-feed' : 'nav-napkin')} />
+      )}
 
       {mode === 'game' && buyBoxApproved && (
         <div className="mx-auto w-full max-w-7xl px-4 pt-4">
@@ -82,6 +89,7 @@ export default function Home() {
 
       {showAdd && <AddDealModal onClose={() => setShowAdd(false)} onAdded={(id) => selectDeal(id)} />}
       {convoDeal && <ConversationPanel dealId={convoDeal.id} dealName={convoDeal.name} onClose={() => setConvoId(null)} />}
+      {gameNotStarted && <GameStartModal />}
     </>
   );
 }
