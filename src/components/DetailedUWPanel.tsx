@@ -30,9 +30,11 @@ export function DetailedUWPanel({ deal }: { deal: MarketDeal }) {
   const hasT12 = files.some((f) => f.kind === 'T12');
   const hasRR = files.some((f) => f.kind === 'RentRoll');
 
-  const [scenarios, setScenarios] = useDealLocal<Scenario[]>('uw-scenarios-v2', deal.id, [
+  const [scenariosRaw, setScenarios] = useDealLocal<Scenario[]>('uw-scenarios-v2', deal.id, [
     { id: 'base', name: 'Base case', inputs: defaultDetailedInputs(deal) },
   ]);
+  // normalize line items saved before the basis field existed (perUnit boolean → basis)
+  const scenarios = scenariosRaw.map((s) => ({ ...s, inputs: normalizeInputs(s.inputs, deal) }));
   const [versions, setVersions] = useDealLocal<Version[]>('uw-versions-v2', deal.id, []);
   const [activeIdx, setActiveIdx] = useState(0);
   const [compareIdx, setCompareIdx] = useState<number | null>(null);
@@ -59,8 +61,8 @@ export function DetailedUWPanel({ deal }: { deal: MarketDeal }) {
   const [loiRecord] = useDealLocal<{ financing: 'new' | 'assumption'; purchasePrice: number }>('loi', deal.id, { financing: 'new', purchasePrice: deal.askPrice });
   const loiSaysAssumption = loiRecord.financing === 'assumption' && inp.financingType !== 'assumption';
 
-  // per-line, per-year proforma overrides
-  const [showYearDetail, setShowYearDetail] = useState(false);
+  // per-line, per-year proforma overrides (open by default — this grid is the heart of the model)
+  const [showYearDetail, setShowYearDetail] = useState(true);
   const setYearOverride = (lineId: string, year: number, value: number) => {
     const cur = inp.lineOverrides ?? {};
     set({ lineOverrides: { ...cur, [lineId]: { ...(cur[lineId] ?? {}), [year]: value } } });
@@ -347,8 +349,8 @@ export function DetailedUWPanel({ deal }: { deal: MarketDeal }) {
 
       {/* Per-year editable line detail */}
       <div className="border-b border-slate-100 p-4">
-        <button onClick={() => setShowYearDetail((v) => !v)} className="flex items-center gap-2 text-base font-bold">
-          <span>{showYearDetail ? '▾' : '▸'}</span> Year-by-year line detail (editable)
+        <button onClick={() => setShowYearDetail((v) => !v)} className="flex w-full items-center gap-2 rounded-lg border-2 border-teal-300 bg-teal-50 px-3 py-1.5 text-base font-bold text-teal-800">
+          <span>{showYearDetail ? '▾' : '▸'}</span> Year-by-year line detail (every item, every year — editable)
           {anyOverrides && <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">has overrides</span>}
         </button>
         {showYearDetail && (
@@ -462,6 +464,28 @@ export function DetailedUWPanel({ deal }: { deal: MarketDeal }) {
 }
 
 function tone(v: number, good: number, ok: number): 'good' | 'ok' | 'bad' { return v >= good ? 'good' : v >= ok ? 'ok' : 'bad'; }
+
+/** Heal inputs saved by older versions: missing basis on line items, missing newer fields. */
+function normalizeInputs(inp: DetailedUWInputs, deal: MarketDeal): DetailedUWInputs {
+  const fix = (items: LineItem[] | undefined, fallback: LineItem[]): LineItem[] => {
+    if (!items || !Array.isArray(items) || items.length === 0) return fallback;
+    return items.map((it) => {
+      if (it.basis) return it;
+      const legacy = it as LineItem & { perUnit?: boolean };
+      return { ...it, basis: legacy.perUnit ? 'perUnit' : 'total' };
+    });
+  };
+  const d = defaultDetailedInputs(deal);
+  return {
+    ...d,
+    ...inp,
+    otherIncome: fix(inp.otherIncome, d.otherIncome),
+    expenses: fix(inp.expenses, d.expenses),
+    capexItems: fix(inp.capexItems, d.capexItems),
+    closingItems: fix(inp.closingItems, d.closingItems),
+    exitItems: fix(inp.exitItems, d.exitItems),
+  };
+}
 
 const SECTION_COLOR: Record<string, string> = {
   emerald: 'border-emerald-300 bg-emerald-50 text-emerald-800',

@@ -1,8 +1,9 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useApp } from '@/lib/store';
 import { useDealLocal } from '@/lib/hooks/useDealLocal';
+import { fetchActiveScenarios, type AuthoredScenario } from '@/lib/data/scenarios';
 import { ScenarioRunner } from '@/components/ScenarioRunner';
 import { ClosingScorecardModal } from '@/components/ClosingScorecardModal';
 import {
@@ -28,10 +29,20 @@ export function C2CDeck({ deal }: { deal: MarketDeal }) {
   const [scenarios] = useDealLocal<Scenario[]>('uw-scenarios-v2', deal.id, [{ inputs: defaultDetailedInputs(deal) }]);
   const [scorecard, setScorecard] = useState<ClosingResult | null>(null);
 
-  const deck = useMemo(
-    () => buildC2CScenarios({ market: game.market, difficulty: difficulty ?? 'standard', missedPSATraps: psa.missed.length }),
-    [game.market, difficulty, psa.missed.length],
-  );
+  // Storylet pool: built-in scenarios + admin-authored ACTIVE ones from the Scenario Builder.
+  // An authored scenario with the same id REPLACES the built-in (admin tuning wins).
+  const [authored, setAuthored] = useState<AuthoredScenario[]>([]);
+  useEffect(() => {
+    let on = true;
+    fetchActiveScenarios('c2c').then((list) => { if (on) setAuthored(list); });
+    return () => { on = false; };
+  }, []);
+
+  const deck = useMemo(() => {
+    const builtins = buildC2CScenarios({ market: game.market, difficulty: difficulty ?? 'standard', missedPSATraps: psa.missed.length });
+    const authoredIds = new Set(authored.map((a) => a.id));
+    return [...builtins.filter((b) => !authoredIds.has(b.id)), ...authored];
+  }, [game.market, difficulty, psa.missed.length, authored]);
 
   const current = deck[state.idx] ?? null;
   const allDone = state.idx >= deck.length;

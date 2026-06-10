@@ -1,7 +1,9 @@
 'use client';
 
+import { useState } from 'react';
 import { useApp } from '@/lib/store';
 import { InfoTip } from '@/components/InfoTip';
+import { ASSET_CLASS_FACTS } from '@/lib/learn/assetClassFacts';
 import { ASSET_CLASSES, pct, usd, type AssetClass } from '@/lib/sim';
 
 const ALL_STATES = ['TX', 'AZ', 'FL', 'GA', 'NC', 'TN'];
@@ -9,6 +11,7 @@ const ALL_STATES = ['TX', 'AZ', 'FL', 'GA', 'NC', 'TN'];
 export function BuyBoxPanel() {
   const { buyBox, updateBuyBox, buyBoxApproved, approveBuyBox, editBuyBox } = useApp();
   const locked = buyBoxApproved;
+  const [showExpect, setShowExpect] = useState(false);
 
   function toggleState(s: string) {
     if (locked) return;
@@ -43,7 +46,16 @@ export function BuyBoxPanel() {
       <fieldset disabled={locked} className={`mt-3 space-y-3 ${locked ? 'opacity-70' : ''}`}>
         {/* Asset class */}
         <div>
-          <label className="flex items-center gap-1 text-xs font-medium text-slate-600">Asset class <InfoTip k="bb.assetClass" /></label>
+          <label className="flex items-center gap-1 text-xs font-medium text-slate-600">
+            Asset class <InfoTip k="bb.assetClass" />
+            <button
+              type="button"
+              onClick={() => setShowExpect((v) => !v)}
+              className="ml-auto rounded-md border border-sky-300 bg-sky-50 px-1.5 py-0.5 text-[10px] font-semibold text-sky-700 hover:bg-sky-100"
+            >
+              {showExpect ? 'hide' : '📊 What to expect'}
+            </button>
+          </label>
           <div className="mt-1 flex flex-wrap gap-1.5">
             {ASSET_CLASSES.map((a) => {
               const on = buyBox.assetClasses.includes(a.id);
@@ -67,6 +79,40 @@ export function BuyBoxPanel() {
               );
             })}
           </div>
+
+          {/* What to expect — asset-class fact cards (owner's risk/return slide) */}
+          {showExpect && (
+            <div className="mt-2 space-y-2">
+              {(buyBox.assetClasses.length ? buyBox.assetClasses : (['multifamily'] as AssetClass[])).map((id) => {
+                const f = ASSET_CLASS_FACTS[id];
+                if (!f) return (
+                  <div key={id} className="rounded-lg border border-slate-200 bg-slate-50 p-2 text-[11px] text-slate-500">
+                    {ASSET_CLASSES.find((a) => a.id === id)?.label}: expectation data coming soon.
+                  </div>
+                );
+                return (
+                  <div key={id} className="rounded-lg border-2 border-sky-200 bg-sky-50/50 p-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-800">{f.label}</span>
+                      <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${f.risk >= 4 ? 'bg-red-100 text-red-700' : f.risk >= 3 ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                        risk {f.risk}/5
+                      </span>
+                    </div>
+                    <div className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-0.5 text-[11px]">
+                      <Fact k="Target return" v={f.annualizedReturn} strong />
+                      <Fact k="Hold" v={f.dealDuration} />
+                      <Fact k="Competition" v={f.acquisitionCompetition != null ? `${f.acquisitionCompetition}/5` : 'n/a'} />
+                      <Fact k="Tenant turnover" v={f.tenantTurnover != null ? `${f.tenantTurnover}/5` : 'n/a'} />
+                      <Fact k="Lease length" v={f.leaseLength} />
+                      <Fact k="Escalations" v={f.rentEscalation} />
+                      <Fact k="Mgmt difficulty" v={f.easeOfManagement} />
+                    </div>
+                    {f.note && <p className="mt-1.5 text-[11px] leading-relaxed text-sky-900">{f.note}</p>}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* States */}
@@ -139,6 +185,15 @@ export function BuyBoxPanel() {
         </button>
       )}
     </section>
+  );
+}
+
+function Fact({ k, v, strong }: { k: string; v: string; strong?: boolean }) {
+  return (
+    <div className="flex justify-between gap-2">
+      <span className="text-slate-500">{k}</span>
+      <span className={`text-right ${strong ? 'font-bold text-slate-900' : 'font-medium text-slate-700'}`}>{v}</span>
+    </div>
   );
 }
 

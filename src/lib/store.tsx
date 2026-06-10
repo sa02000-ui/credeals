@@ -213,7 +213,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const value = useMemo<AppContextValue>(() => {
     const configured = isSupabaseConfigured();
-    const deals = configured ? (dbDeals ?? []) : [...state.customDeals, ...SEED_DEALS];
+    // Game and Real are separate worlds: each mode only sees its own deals (deals.sim_mode).
+    const allDeals = configured ? (dbDeals ?? []) : [...state.customDeals, ...SEED_DEALS];
+    const deals = allDeals.filter((d) => (d.simMode ?? 'game') === state.mode);
     const statusOf = (id: string): DealStatus =>
       configured ? (dbStages[id] ?? 'new') : (state.dealStates[id]?.status ?? 'new');
 

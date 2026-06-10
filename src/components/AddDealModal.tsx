@@ -7,7 +7,7 @@ import { ASSET_CLASSES, simulateLookups, type AssetClass, type DealFile, type Ma
 const STATES = ['TX', 'AZ', 'FL', 'GA', 'NC', 'TN'];
 
 export function AddDealModal({ onClose, onAdded }: { onClose: () => void; onAdded: (id: string) => void }) {
-  const { addDeal, addFiles } = useApp();
+  const { addDeal, addFiles, mode } = useApp();
   const [assetClass, setAssetClass] = useState<AssetClass>('multifamily');
   const [t12, setT12] = useState<File | null>(null);
   const [rentRoll, setRentRoll] = useState<File | null>(null);
@@ -58,6 +58,7 @@ export function AddDealModal({ onClose, onAdded }: { onClose: () => void; onAdde
       source: 'Added by you',
       blurb: 'Deal you sourced directly. Lookups were auto-estimated from the address.',
       custom: true,
+      simMode: mode, // a deal lives in the world it was created in (game vs real)
     };
     const realId = await addDeal(deal);
     const attached: DealFile[] = [];

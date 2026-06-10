@@ -282,14 +282,31 @@ function StepEditor({ step, stepIds, allScenarioIds, onChange, onRename, onRemov
   step: ScenarioStep; stepIds: string[]; allScenarioIds: string[];
   onChange: (p: Partial<ScenarioStep>) => void; onRename: (newId: string) => void; onRemove: () => void;
 }) {
+  // collapsed by default so long/imported scenarios stay scannable; expand to edit
+  const [open, setOpen] = useState(false);
   const setOpt = (i: number, patch: Partial<ScenarioOption>) =>
     onChange({ options: step.options.map((o, k) => (k === i ? { ...o, ...patch } : o)) });
   const addOpt = () => onChange({ options: [...step.options, { id: `opt${step.options.length + 1}`, label: 'New option', tone: 'warn' }] });
   const rmOpt = (i: number) => onChange({ options: step.options.filter((_, k) => k !== i) });
 
+  if (!open) {
+    return (
+      <button onClick={() => setOpen(true)} className="block w-full rounded-lg border border-slate-200 px-3 py-2 text-left hover:border-slate-400 hover:bg-slate-50">
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-slate-400">▸</span>
+          <span className="rounded bg-slate-100 px-1.5 font-mono text-[11px] text-slate-600">{step.id}</span>
+          {step.speaker && <span className="text-[11px] font-semibold text-emerald-600">{step.speaker}</span>}
+          <span className="min-w-0 flex-1 truncate text-xs text-slate-600">{step.prompt || '(no prompt yet)'}</span>
+          <span className="shrink-0 rounded-full bg-indigo-50 px-1.5 text-[10px] font-semibold text-indigo-600">{step.options.length} option{step.options.length === 1 ? '' : 's'}</span>
+        </div>
+      </button>
+    );
+  }
+
   return (
-    <div className="rounded-lg border-2 border-slate-200">
+    <div className="rounded-lg border-2 border-slate-300">
       <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 bg-slate-50 px-3 py-1.5">
+        <button onClick={() => setOpen(false)} className="text-xs text-slate-500 hover:text-slate-900" title="Collapse">▾</button>
         <span className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Step</span>
         <input defaultValue={step.id} onBlur={(e) => e.target.value !== step.id && onRename(e.target.value.trim())} className="w-28 rounded-md border border-slate-200 bg-white px-1.5 py-0.5 font-mono text-xs focus:outline-none" title="Step id (rename here)" />
         <input value={step.speaker ?? ''} onChange={(e) => onChange({ speaker: e.target.value })} placeholder="Speaker (Broker / Seller / Lender…)" className="w-44 rounded-md border border-slate-200 bg-white px-1.5 py-0.5 text-xs focus:outline-none" />

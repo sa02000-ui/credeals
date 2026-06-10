@@ -10,12 +10,14 @@
  *   custom reminders, auto-reschedule) + quarterly performance logging.
  */
 
-import { Fragment, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useApp } from '@/lib/store';
 import { useDealLocal } from '@/lib/hooks/useDealLocal';
 import { InfoTip } from '@/components/InfoTip';
 import { C2CDeck } from '@/components/C2CDeck';
-import { usd, type MarketDeal } from '@/lib/sim';
+import { ScenarioRunner } from '@/components/ScenarioRunner';
+import { fetchActiveScenarios, type AuthoredScenario } from '@/lib/data/scenarios';
+import { usd, type MarketDeal, type ScenarioEffects } from '@/lib/sim';
 
 function PhaseShell({ title, subtitle, info, children }: { title: string; subtitle: string; info?: string; children: React.ReactNode }) {
   return (
@@ -367,7 +369,7 @@ function seedReminders(): Reminder[] {
 }
 
 export function AMPanel({ deal }: { deal: MarketDeal }) {
-  const { peopleOf } = useApp();
+  const { peopleOf, mode } = useApp();
   const people = peopleOf(deal.id);
   const [state, setState] = useDealLocal<AMState>('am', deal.id, { takeover: {}, takeoverCollapsed: false, reminders: [], quarters: [], seeded: false });
   const reminders = state.seeded ? state.reminders : seedReminders();
@@ -429,6 +431,8 @@ export function AMPanel({ deal }: { deal: MarketDeal }) {
         </div>
       )}
 
+      {mode === 'game' && <OperatingEvents deal={deal} />}
+
       <div className="mb-3 flex gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1">
         {([['reminders', 'Reminders & tasks'], ['quarterly', 'Quarterly performance']] as const).map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)} className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium ${tab === id ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}>{label}</button>
@@ -467,6 +471,44 @@ export function AMPanel({ deal }: { deal: MarketDeal }) {
 
       {tab === 'quarterly' && <QuarterlyLog state={state} setState={setState} />}
     </PhaseShell>
+  );
+}
+
+/** Game-mode operating surprises during the hold — plays admin-authored 'am' scenarios in order. */
+function OperatingEvents({ deal }: { deal: MarketDeal }) {
+  const { applyGameOutcome, setStatus } = useApp();
+  const [events, setEvents] = useState<AuthoredScenario[]>([]);
+  const [cursor, setCursor] = useDealLocal<number>('am-events', deal.id, 0);
+
+  useEffect(() => {
+    let on = true;
+    fetchActiveScenarios('am').then((list) => { if (on) setEvents(list); });
+    return () => { on = false; };
+  }, []);
+
+  const current = events[cursor] ?? null;
+  if (!current) return null;
+
+  function onEffects(e: ScenarioEffects) {
+    if (e.cash || e.rep) applyGameOutcome({ dealId: deal.id, cashDelta: e.cash, cashLabel: `${current?.title} — ${deal.name}`, repDelta: e.rep });
+  }
+  function onComplete(flags: Record<string, boolean>) {
+    if (flags.walk || flags.sell) {
+      applyGameOutcome({ dealId: deal.id, event: { title: `Exited: ${deal.name}`, detail: 'You exited the asset.', lesson: 'Every hold ends with a refi or a sale — the score is actuals vs. the proforma you promised.' } });
+      setStatus(deal.id, 'archived');
+      return;
+    }
+    setCursor((c) => c + 1);
+  }
+
+  return (
+    <div className="mb-4 rounded-xl border-2 border-amber-300 bg-amber-50/40 p-3">
+      <div className="mb-2 flex items-center gap-2">
+        <h3 className="text-sm font-bold text-slate-800">📨 Operating event</h3>
+        <span className="ml-auto text-xs text-slate-500">{cursor + 1} of {events.length}</span>
+      </div>
+      <ScenarioRunner key={current.id} scenario={current} onEffects={onEffects} onComplete={onComplete} />
+    </div>
   );
 }
 
