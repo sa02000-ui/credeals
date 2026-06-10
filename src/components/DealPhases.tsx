@@ -7,7 +7,10 @@ import { NapkinPanel } from '@/components/NapkinPanel';
 import { DetailedUWPanel } from '@/components/DetailedUWPanel';
 import { LOIPanel } from '@/components/LOIPanel';
 import { C2CPanel, AMPanel } from '@/components/PhasePanels';
+import { DocumentsPanel } from '@/components/DocumentsPanel';
 import { PHASES, stageDef, stageIndex, type DealStage, type MarketDeal } from '@/lib/sim';
+
+type Tab = DealStage | 'docs';
 
 const PHASE_INFO: Record<DealStage, string> = {
   new: 'step.pick',
@@ -23,7 +26,7 @@ export function DealPhases({ deal, onOpenConversation }: { deal: MarketDeal; onO
   const { statusOf } = useApp();
   const status = statusOf(deal.id);
   const unlockedThrough = status === 'archived' ? 0 : Math.max(0, stageIndex(status));
-  const [phase, setPhase] = useState<DealStage>(status === 'new' || status === 'archived' ? 'napkin' : status);
+  const [phase, setPhase] = useState<Tab>(status === 'new' || status === 'archived' ? 'napkin' : status);
 
   return (
     <div className="space-y-3">
@@ -56,21 +59,33 @@ export function DealPhases({ deal, onOpenConversation }: { deal: MarketDeal; onO
               </button>
             );
           })}
+          {/* Always-available Documents tab (the deal's central drive) */}
+          <button
+            onClick={() => setPhase('docs')}
+            className={`ml-1 flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition ${
+              phase === 'docs' ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
+            }`}
+          >
+            📁 Documents
+          </button>
         </div>
       </div>
 
       {/* Contextual "what is this step" helper (learn-as-you-go) */}
-      <div className="flex items-center gap-1.5 px-1 text-xs text-slate-500">
-        <span className="font-medium text-slate-600">{stageDef(phase).label}</span>
-        <InfoTip k={PHASE_INFO[phase]} />
-        <span className="text-slate-400">— hover the ⓘ on any field to learn the concept.</span>
-      </div>
+      {phase !== 'docs' && (
+        <div className="flex items-center gap-1.5 px-1 text-xs text-slate-500">
+          <span className="font-medium text-slate-600">{stageDef(phase).label}</span>
+          <InfoTip k={PHASE_INFO[phase]} />
+          <span className="text-slate-400">— hover the ⓘ on any field to learn the concept.</span>
+        </div>
+      )}
 
       {phase === 'napkin' && <NapkinPanel deal={deal} onOpenConversation={onOpenConversation} />}
       {phase === 'detailed' && <DetailedUWPanel deal={deal} />}
       {phase === 'loi' && <LOIPanel deal={deal} />}
       {phase === 'c2c' && <C2CPanel deal={deal} />}
       {phase === 'am' && <AMPanel deal={deal} />}
+      {phase === 'docs' && <DocumentsPanel deal={deal} />}
     </div>
   );
 }

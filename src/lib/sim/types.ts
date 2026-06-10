@@ -197,7 +197,7 @@ export interface DealComment {
 }
 
 /** A file attached to a deal (broker OM, CoStar report, T-12, rent roll, etc.). */
-export type DealFileKind = 'T12' | 'RentRoll' | 'OM' | 'CoStar' | 'PSA' | 'Other';
+export type DealFileKind = 'T12' | 'RentRoll' | 'OM' | 'CoStar' | 'PSA' | 'LOI' | 'Other';
 
 export interface DealFile {
   id: string;

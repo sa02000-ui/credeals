@@ -304,6 +304,7 @@ function FilesSection({
     OM: 'bg-amber-100 text-amber-700',
     CoStar: 'bg-sky-100 text-sky-700',
     PSA: 'bg-emerald-100 text-emerald-700',
+    LOI: 'bg-rose-100 text-rose-700',
     Other: 'bg-slate-100 text-slate-600',
   };
   return (
