@@ -37,6 +37,13 @@ function addDays(iso: string, days: number): Date {
   d.setDate(d.getDate() + days);
   return d;
 }
+function toISO(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+/** whole-day difference between two ISO dates (b − a) */
+function diffDays(aIso: string, bIso: string): number {
+  return Math.round((new Date(bIso + 'T00:00:00').getTime() - new Date(aIso + 'T00:00:00').getTime()) / 86400000);
+}
 function fmtDate(d: Date): string {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' });
 }
@@ -236,7 +243,7 @@ export function C2CPanel({ deal }: { deal: MarketDeal }) {
               <th className="px-2 py-1 text-left font-medium">Task</th>
               <th className="px-2 py-1 text-left font-medium">Workstream</th>
               <th className="px-2 py-1 text-left font-medium">Lead</th>
-              <th className="px-2 py-1 text-right font-medium">Start (d)</th>
+              <th className="px-2 py-1 text-right font-medium">Start (date or days from PSA)</th>
               <th className="px-2 py-1 text-right font-medium">Days</th>
               <th className="px-2 py-1 text-right font-medium">Due</th>
               <th className="px-2 py-1 text-right font-medium">%</th>
@@ -244,7 +251,7 @@ export function C2CPanel({ deal }: { deal: MarketDeal }) {
             </tr>
           </thead>
           <tbody>
-            {visible.map(({ t, offset, duration, due, o, overdue, dueSoon, lead }) => {
+            {visible.map(({ t, offset, duration, start, due, o, overdue, dueSoon, lead }) => {
               const ws = WORKSTREAMS.find((w) => w.id === t.ws)!;
               return (
                 <Fragment key={t.id}>
@@ -260,7 +267,26 @@ export function C2CPanel({ deal }: { deal: MarketDeal }) {
                         {leadOptions(t).map((n) => (<option key={n} value={n}>{n}</option>))}
                       </select>
                     </td>
-                    <td className="px-2 py-1.5 text-right"><input type="number" value={offset} onChange={(e) => setOv(t.id, { offset: Number(e.target.value) })} className="w-14 rounded border border-slate-200 px-1 py-0.5 text-right text-xs tabular-nums focus:outline-none" /></td>
+                    <td className="px-2 py-1.5 text-right">
+                      {/* Start: pick a calendar date OR type days-from-PSA — they stay in sync */}
+                      <div className="flex items-center justify-end gap-1">
+                        <input
+                          type="date"
+                          value={toISO(start)}
+                          onChange={(e) => e.target.value && setOv(t.id, { offset: diffDays(state.startDate, e.target.value) })}
+                          className="rounded border border-slate-200 px-1 py-0.5 text-xs tabular-nums focus:outline-none"
+                          title="Start date"
+                        />
+                        <input
+                          type="number"
+                          value={offset}
+                          onChange={(e) => setOv(t.id, { offset: Number(e.target.value) })}
+                          className="w-12 rounded border border-slate-200 px-1 py-0.5 text-right text-xs tabular-nums focus:outline-none"
+                          title="Days from PSA execution"
+                        />
+                        <span className="text-[9px] text-slate-400">d</span>
+                      </div>
+                    </td>
                     <td className="px-2 py-1.5 text-right"><input type="number" value={duration} onChange={(e) => setOv(t.id, { duration: Number(e.target.value) })} className="w-14 rounded border border-slate-200 px-1 py-0.5 text-right text-xs tabular-nums focus:outline-none" /></td>
                     <td className={`px-2 py-1.5 text-right text-xs tabular-nums ${overdue ? 'font-semibold text-red-600' : dueSoon ? 'font-semibold text-amber-600' : 'text-slate-600'}`}>{fmtDate(due)}{overdue && !o.done ? ' ⚠' : ''}</td>
                     <td className="px-2 py-1.5 text-right"><input type="number" min={0} max={100} value={o.pct ?? 0} onChange={(e) => setOv(t.id, { pct: Number(e.target.value), done: Number(e.target.value) >= 100 })} className="w-14 rounded border border-slate-200 px-1 py-0.5 text-right text-xs tabular-nums focus:outline-none" /></td>
