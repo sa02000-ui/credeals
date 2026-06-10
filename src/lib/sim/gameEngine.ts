@@ -209,6 +209,152 @@ export function resolveCapitalRaise(i: RaiseInput): RaiseOutcome {
   };
 }
 
+// --- LOI live negotiation (DESIGN §22 E1) ---
+
+export interface LOITerms {
+  price: number;
+  emdPct: number; // EMD as a fraction of price (higher pleases seller)
+  ddDays: number; // shorter pleases seller
+  closeDays: number; // shorter pleases seller
+  financingContingency: boolean; // removing it pleases seller
+}
+
+export interface NegInput {
+  terms: LOITerms;
+  askPrice: number;
+  seller: Persona;
+  market: MarketCondition;
+  brokerRep: number; // 0–100
+  responsiveness: number; // 0–1 (1 = replied fast)
+  round: number; // 1-based
+  competingPressure: number; // 0–1, accumulates
+}
+
+export interface NegResult {
+  outcome: 'accepted' | 'counter' | 'rejected' | 'lost';
+  counter?: LOITerms;
+  changes: string[];
+  competingPressure: number;
+  message: string;
+  lesson: string;
+}
+
+export function negotiateLOI(i: NegInput): NegResult {
+  const t = i.terms;
+  const maxDisc = maxAcceptableDiscount({ offerPrice: t.price, askPrice: i.askPrice, seller: i.seller, market: i.market, brokerRep: i.brokerRep });
+  const reservationPrice = i.askPrice * (1 - maxDisc);
+  const flex = i.seller.traits.priceFlex ?? 0.4;
+
+  // competing-buyer pressure: rises with hot market, slow responses, and rounds dragging on
+  const baseGrow = i.market === 'hot' ? 0.24 : i.market === 'balanced' ? 0.11 : 0.02;
+  const grow = baseGrow * (1.2 - i.responsiveness) * (1 + 0.18 * (i.round - 1));
+  const competingPressure = clamp(i.competingPressure + grow, 0, 1);
+
+  // term-by-term satisfaction
+  const priceScore = clamp((t.price - reservationPrice * 0.96) / (i.askPrice - reservationPrice * 0.96 + 1), 0, 1);
+  const emdScore = clamp(t.emdPct / 0.02, 0, 1);
+  const ddScore = clamp((45 - t.ddDays) / 30, 0, 1);
+  const closeScore = clamp((75 - t.closeDays) / 45, 0, 1);
+  const contScore = t.financingContingency ? 0.35 : 1;
+  const score = priceScore * 0.5 + emdScore * 0.1 + ddScore * 0.12 + closeScore * 0.08 + contScore * 0.2 + i.responsiveness * 0.05;
+
+  const gapBelow = (reservationPrice - t.price) / i.askPrice;
+  const insulting = gapBelow > 0.06 && flex < 0.45;
+
+  // lost to a competitor when pressure maxes out in a competitive market
+  if (competingPressure >= 1 && i.market !== 'tough') {
+    return { outcome: 'lost', changes: [], competingPressure, message: `${i.seller.name} went with a competing buyer who moved faster.`, lesson: 'In a hot market, speed wins. Decisive, prompt responses keep you ahead of other bidders.' };
+  }
+  if (insulting && i.round === 1) {
+    return { outcome: 'rejected', changes: [], competingPressure, message: `${i.seller.name} rejects the offer — it's well below what they'll consider.`, lesson: 'Match aggression to the seller. A firm seller walks from a lowball instead of countering.' };
+  }
+
+  const acceptThreshold = 0.6;
+  if (t.price >= reservationPrice && score >= acceptThreshold) {
+    return { outcome: 'accepted', changes: [], competingPressure, message: `${i.seller.name} accepts your terms at ${fmt(t.price)}.`, lesson: score > 0.85 ? 'Clean, decisive terms — sellers reward certainty of close.' : 'Accepted just inside their reservation. Well judged.' };
+  }
+
+  // build a counter: move the weak terms toward the seller
+  const counter: LOITerms = {
+    price: Math.round(Math.max(t.price, reservationPrice)),
+    emdPct: Math.max(t.emdPct, 0.015),
+    ddDays: Math.min(t.ddDays, 30),
+    closeDays: Math.min(t.closeDays, 45),
+    financingContingency: false,
+  };
+  const changes: string[] = [];
+  if (counter.price > t.price) changes.push(`raise price to ${fmt(counter.price)}`);
+  if (counter.emdPct > t.emdPct + 1e-6) changes.push(`increase earnest money to ${(counter.emdPct * 100).toFixed(1)}%`);
+  if (counter.ddDays < t.ddDays) changes.push(`shorten due diligence to ${counter.ddDays} days`);
+  if (counter.closeDays < t.closeDays) changes.push(`close within ${counter.closeDays} days`);
+  if (t.financingContingency) changes.push('drop the financing contingency');
+  if (changes.length === 0) changes.push('hold firm on current terms');
+
+  return {
+    outcome: 'counter',
+    counter,
+    changes,
+    competingPressure,
+    message: `${i.seller.name} counters — they want you to ${changes.join(', ')}.`,
+    lesson: 'A counter means you are in the zone. Concede what costs you least (often terms, not price) and respond quickly.',
+  };
+}
+
+// --- Closing resolution + scorecard (DESIGN §22 E4) ---
+
+export interface ClosingFactors {
+  contingenciesCleared: boolean;
+  raiseFunded: boolean;
+  onTime: boolean;
+  psaProtection: number; // 0–1 share of sneaky clauses caught
+  ddDone: boolean;
+  difficulty: Difficulty;
+}
+export interface DealGrade { label: string; grade: 'A' | 'B' | 'C' | 'D'; note: string }
+export interface ClosingResult {
+  success: boolean;
+  closeScore: number; // 0–100
+  performanceFactor: number; // multiplier applied to projected returns
+  grades: DealGrade[];
+  message: string;
+  lesson: string;
+  recovery?: string;
+}
+
+export function resolveClosing(f: ClosingFactors): ClosingResult {
+  let score = 0;
+  score += f.contingenciesCleared ? 30 : 0;
+  score += f.raiseFunded ? 30 : 0;
+  score += f.onTime ? 15 : 0;
+  score += Math.round(f.psaProtection * 15);
+  score += f.ddDone ? 10 : 0;
+
+  const pass = f.difficulty === 'guided' ? 50 : f.difficulty === 'expert' ? 70 : 60;
+  const success = score >= pass;
+  const performanceFactor = clamp(0.62 + (score / 100) * 0.45 - (f.ddDone ? 0 : 0.05) - (1 - f.psaProtection) * 0.06, 0.5, 1.05);
+
+  const g = (ok: boolean, label: string, okNote: string, badNote: string): DealGrade => ({ label, grade: ok ? 'A' : 'C', note: ok ? okNote : badNote });
+  const grades: DealGrade[] = [
+    g(f.raiseFunded, 'Capital raise', 'Fully funded the equity', 'Came up short on the raise'),
+    g(f.contingenciesCleared, 'Diligence & debt', 'Cleared contingencies cleanly', 'Left contingencies unresolved'),
+    g(f.onTime, 'Critical dates', 'Closed on schedule', 'Slipped key deadlines'),
+    { label: 'Contract protection', grade: f.psaProtection >= 0.8 ? 'A' : f.psaProtection >= 0.5 ? 'B' : 'D', note: `Caught ${Math.round(f.psaProtection * 100)}% of the PSA traps` },
+    g(f.ddDone, 'Due diligence', 'Did the work — no surprises', 'Skipped DD — hidden risks remain'),
+  ];
+
+  return {
+    success,
+    closeScore: score,
+    performanceFactor,
+    grades,
+    message: success ? 'You closed the deal!' : 'The deal stumbled at the closing table.',
+    lesson: success
+      ? 'Certainty of close comes from a funded raise, cleared contingencies, and hit dates — protect all three.'
+      : 'A miss here is recoverable: bring a partner, extend, or right-size — but it costs you.',
+    recovery: success ? undefined : !f.raiseFunded ? 'Bring a capital partner to cover the equity gap (shared promote).' : 'Negotiate an extension and re-clear the open items.',
+  };
+}
+
 export function applyRep(r: Reputation, patch: Partial<Reputation>): Reputation {
   return {
     broker: clamp(r.broker + (patch.broker ?? 0)),

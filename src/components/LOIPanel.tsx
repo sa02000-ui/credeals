@@ -5,7 +5,9 @@ import { useApp } from '@/lib/store';
 import { useDealLocal } from '@/lib/hooks/useDealLocal';
 import { InfoTip } from '@/components/InfoTip';
 import { downloadDoc, downloadPdf } from '@/lib/export/docExport';
-import { dealCounterparties, resolveOffer, usd, type MarketDeal, type OfferOutcome } from '@/lib/sim';
+import { LOINegotiationModal } from '@/components/LOINegotiationModal';
+import { PSARedlineModal } from '@/components/PSARedlineModal';
+import { buildPSA, dealCounterparties, usd, type LOITerms, type MarketDeal, type PSAClause } from '@/lib/sim';
 
 type CloseFrom = 'dd' | 'psa';
 type Financing = 'new' | 'assumption';
@@ -211,23 +213,32 @@ export function LOIPanel({ deal }: { deal: MarketDeal }) {
   const [edited, setEdited] = useState<string | null>(null);
   const text = edited ?? generated;
 
-  const { mode, game, applyGameOutcome, setStatus, statusOf, addFiles, filesOf } = useApp();
+  const { mode, difficulty, applyGameOutcome, setStatus, statusOf, addFiles, filesOf } = useApp();
   const { seller } = dealCounterparties(deal.id);
-  const [outcome, setOutcome] = useState<OfferOutcome | null>(null);
   const [celebrate, setCelebrate] = useState(false);
+  const [negotiating, setNegotiating] = useState(false);
+  const [psaClauses, setPsaClauses] = useState<PSAClause[] | null>(null);
+  const [, setPsaState] = useDealLocal<{ done: boolean; caught: string[]; missed: string[] }>('psa', deal.id, { done: false, caught: [], missed: [] });
   const executedLoi = filesOf(deal.id).find((x) => x.kind === 'LOI');
 
   const emdPct = f.emdAmount / Math.max(1, f.purchasePrice);
+  const negTerms: LOITerms = { price: f.purchasePrice, emdPct, ddDays: f.ddDays, closeDays: f.closeDays, financingContingency: f.finContingencyEnabled };
 
-  function submitOffer() {
-    const o = resolveOffer({ offerPrice: f.purchasePrice, askPrice: deal.askPrice, seller, market: game.market, brokerRep: game.reputation.broker });
-    setOutcome(o);
-    if (o.result === 'accepted') {
-      applyGameOutcome({ dealId: deal.id, repDelta: { broker: o.repBrokerDelta }, cashDelta: -Math.round(f.emdAmount), cashLabel: `Earnest money — ${deal.name}`, event: { title: `Offer accepted: ${deal.name}`, detail: o.message, lesson: o.lesson }, pursued: true });
-      setCelebrate(true);
-    } else {
-      applyGameOutcome({ dealId: deal.id, repDelta: { broker: o.repBrokerDelta }, event: { title: `Offer ${o.result}: ${deal.name}`, detail: o.message, lesson: o.lesson } });
-    }
+  function onLoiAccepted(finalTerms: LOITerms) {
+    set({ purchasePrice: finalTerms.price, emdAmount: Math.round(finalTerms.emdPct * finalTerms.price), ddDays: finalTerms.ddDays, closeDays: finalTerms.closeDays, finContingencyEnabled: finalTerms.financingContingency });
+    applyGameOutcome({ dealId: deal.id, pursued: true, repDelta: { broker: 3 }, cashDelta: -Math.round(finalTerms.emdPct * finalTerms.price), cashLabel: `Earnest money — ${deal.name}`, event: { title: `LOI accepted: ${deal.name}`, detail: `Terms agreed at ${usd(finalTerms.price)}.`, lesson: 'LOI accepted — next the seller’s counsel sends the PSA. Read it carefully.' } });
+    setNegotiating(false);
+    setPsaClauses(buildPSA(difficulty ?? 'standard'));
+  }
+  function onLoiLost() {
+    applyGameOutcome({ dealId: deal.id, repDelta: { broker: -2 }, event: { title: `Lost: ${deal.name}`, detail: 'The seller went another direction.', lesson: 'You can’t win them all — move faster or sharpen your terms next time.' } });
+    setNegotiating(false);
+    setStatus(deal.id, 'archived');
+  }
+  function onPsaDone(caught: string[], missed: string[]) {
+    setPsaState({ done: true, caught, missed });
+    setPsaClauses(null);
+    setStatus(deal.id, 'c2c');
   }
 
   function onUploadExecuted(e: React.ChangeEvent<HTMLInputElement>) {
@@ -360,21 +371,13 @@ export function LOIPanel({ deal }: { deal: MarketDeal }) {
         </div>
       </div>
 
-      {/* Game-mode offer to the seller persona */}
+      {/* Game-mode: submit the LOI into a live negotiation with the seller */}
       {mode === 'game' && (
         <div className="border-b border-slate-100 bg-violet-50/40 p-4">
-          <h3 className="mb-1 text-sm font-semibold">🎭 Make the offer</h3>
+          <h3 className="mb-1 text-sm font-semibold">🎭 Submit &amp; negotiate</h3>
           <p className="mb-2 text-xs text-slate-600">Seller: <b>{seller.name}</b> — {seller.blurb} <span className="text-violet-700">💡 {seller.tells[0]}</span></p>
-          <button onClick={submitOffer} className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-700">Submit offer at {usd(f.purchasePrice, { compact: true })} →</button>
-          {outcome && (
-            <div className={`mt-3 rounded-lg border p-3 text-sm ${outcome.result === 'accepted' ? 'border-emerald-200 bg-emerald-50' : outcome.result === 'countered' ? 'border-amber-200 bg-amber-50' : 'border-red-200 bg-red-50'}`}>
-              <div className="font-semibold">{outcome.result === 'accepted' ? '✅ Accepted' : outcome.result === 'countered' ? '↔️ Countered' : '✕ Rejected'} — {outcome.message}</div>
-              <div className="mt-1 text-xs text-slate-600">💡 {outcome.lesson}</div>
-              {outcome.result === 'countered' && outcome.counterPrice != null && (
-                <button onClick={() => { setF((s) => ({ ...s, purchasePrice: outcome.counterPrice! })); setOutcome(null); }} className="mt-2 rounded-md border border-amber-400 px-2 py-1 text-xs font-medium text-amber-800 hover:bg-amber-100">Accept counter at {usd(outcome.counterPrice, { compact: true })}</button>
-              )}
-            </div>
-          )}
+          <button onClick={() => setNegotiating(true)} className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-700">Submit LOI &amp; negotiate at {usd(f.purchasePrice, { compact: true })} →</button>
+          <p className="mt-1 text-[11px] text-slate-500">The seller will counter specific terms — respond fast to keep them at the table.</p>
         </div>
       )}
 
@@ -392,17 +395,24 @@ export function LOIPanel({ deal }: { deal: MarketDeal }) {
         </div>
         <textarea value={text} onChange={(e) => setEdited(e.target.value)} spellCheck={false} className="h-96 w-full rounded-lg border border-slate-300 bg-slate-50 p-3 font-mono text-xs leading-relaxed text-slate-800 focus:border-slate-900 focus:outline-none" />
 
-        {/* Accept → unlock C2C */}
-        <div className="mt-4 rounded-lg border-2 border-emerald-200 bg-emerald-50/50 p-3">
-          <div className="flex items-center justify-between gap-2">
-            <div>
-              <div className="text-sm font-semibold text-emerald-800">LOI accepted by the seller?</div>
-              <div className="text-xs text-emerald-700">Mark it accepted to unlock Contract-to-Close.</div>
+        {/* Real mode: mark accepted manually to unlock C2C */}
+        {mode === 'real' && (
+          <div className="mt-4 rounded-lg border-2 border-emerald-200 bg-emerald-50/50 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <div className="text-sm font-semibold text-emerald-800">LOI accepted by the seller?</div>
+                <div className="text-xs text-emerald-700">Mark it accepted to unlock Contract-to-Close.</div>
+              </div>
+              <button onClick={() => setCelebrate(true)} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700">🤝 LOI Accepted</button>
             </div>
-            <button onClick={() => setCelebrate(true)} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700">🤝 LOI Accepted</button>
           </div>
-        </div>
+        )}
       </div>
+
+      {negotiating && (
+        <LOINegotiationModal dealName={deal.name} askPrice={deal.askPrice} seller={seller} initialTerms={negTerms} onAccepted={onLoiAccepted} onLost={onLoiLost} onClose={() => setNegotiating(false)} />
+      )}
+      {psaClauses && <PSARedlineModal dealName={deal.name} clauses={psaClauses} onDone={onPsaDone} onClose={() => setPsaClauses(null)} />}
 
       {celebrate && (
         <CelebrationModal

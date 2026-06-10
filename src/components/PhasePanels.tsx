@@ -14,7 +14,8 @@ import { Fragment, useMemo, useState } from 'react';
 import { useApp } from '@/lib/store';
 import { useDealLocal } from '@/lib/hooks/useDealLocal';
 import { InfoTip } from '@/components/InfoTip';
-import { resolveCapitalRaise, usd, type MarketDeal, type RaiseOutcome } from '@/lib/sim';
+import { C2CDeck } from '@/components/C2CDeck';
+import { usd, type MarketDeal } from '@/lib/sim';
 
 function PhaseShell({ title, subtitle, info, children }: { title: string; subtitle: string; info?: string; children: React.ReactNode }) {
   return (
@@ -118,7 +119,7 @@ interface C2CState {
 }
 
 export function C2CPanel({ deal }: { deal: MarketDeal }) {
-  const { filesOf, addFiles, peopleOf } = useApp();
+  const { filesOf, addFiles, peopleOf, mode } = useApp();
   const files = filesOf(deal.id);
   const psa = files.find((f) => f.kind === 'PSA');
   const people = peopleOf(deal.id);
@@ -273,7 +274,7 @@ export function C2CPanel({ deal }: { deal: MarketDeal }) {
       </div>
       {people.length === 0 && <p className="mt-2 text-[11px] text-slate-400">Tip: add partners/teammates in “👥 People &amp; access” above to assign them as task leads.</p>}
 
-      <CapitalRaise deal={deal} />
+      {mode === 'game' && <C2CDeck deal={deal} />}
     </PhaseShell>
   );
 }
@@ -283,58 +284,6 @@ function FilterChip({ label, active, onClick, dot }: { label: string; active: bo
     <button onClick={onClick} className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium ${active ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-300 text-slate-600 hover:bg-slate-100'}`}>
       {dot && <span className={`h-2 w-2 rounded-full ${dot}`} />}{label}
     </button>
-  );
-}
-
-function CapitalRaise({ deal }: { deal: MarketDeal }) {
-  const { mode, game, applyGameOutcome, setStatus, statusOf } = useApp();
-  const equityNeeded = Math.round(deal.askPrice * 0.35);
-  const [strategy, setStrategy] = useState<'solo' | 'partners'>('solo');
-  const [outcome, setOutcome] = useState<RaiseOutcome | null>(null);
-  const closed = statusOf(deal.id) === 'am' || statusOf(deal.id) === 'archived';
-  if (mode !== 'game') return null;
-
-  function runRaise(s: 'solo' | 'partners') {
-    const o = resolveCapitalRaise({ equityNeeded, strategy: s, market: game.market, lpRep: game.reputation.lp, dealsClosed: game.dealsClosed });
-    setOutcome(o);
-    if (o.success) {
-      applyGameOutcome({ dealId: deal.id, repDelta: { lp: o.repLpDelta }, closed: true, event: { title: `Closed: ${deal.name}`, detail: `${o.message} (${s === 'partners' ? 'with capital partners' : 'solo raise'})`, lesson: o.lesson } });
-      setStatus(deal.id, 'am');
-    } else {
-      applyGameOutcome({ dealId: deal.id, repDelta: { lp: o.repLpDelta }, event: { title: `Raise short: ${deal.name}`, detail: o.message, lesson: o.lesson } });
-    }
-  }
-
-  return (
-    <div className="mt-4 rounded-lg border border-violet-200 bg-violet-50/40 p-4">
-      <h3 className="flex items-center gap-1.5 text-sm font-semibold">🤝 Raise the equity <InfoTip k="r.waterfall" /></h3>
-      <p className="mt-1 text-xs text-slate-600">This deal needs <b>{usd(equityNeeded, { compact: true })}</b> of equity (≈35% of price). Raise it yourself or bring capital partners (wider reach, shared promote).</p>
-      {closed ? (
-        <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">✅ Capital is in and the deal is closed — it&apos;s now in Asset Management.</div>
-      ) : (
-        <>
-          <div className="mt-3 flex gap-2">
-            {(['solo', 'partners'] as const).map((s) => (
-              <button key={s} onClick={() => setStrategy(s)} className={`rounded-lg border px-3 py-1.5 text-sm font-medium ${strategy === s ? 'border-violet-500 bg-violet-600 text-white' : 'border-slate-300 text-slate-700 hover:bg-slate-100'}`}>{s === 'solo' ? 'Raise solo' : 'Bring capital partners'}</button>
-            ))}
-            <button onClick={() => runRaise(strategy)} className="ml-auto rounded-lg bg-violet-600 px-4 py-1.5 text-sm font-semibold text-white hover:bg-violet-700">Launch the raise →</button>
-          </div>
-          {outcome && (
-            <div className={`mt-3 rounded-lg border p-3 text-sm ${outcome.success ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'}`}>
-              <div className="font-semibold">{outcome.success ? '✅ Fully funded' : '⚠️ Short'} — {outcome.message}</div>
-              <div className="mt-1 text-xs text-slate-500">Capacity {usd(outcome.capacity, { compact: true })} · raised {usd(outcome.raised, { compact: true })}</div>
-              <div className="mt-1 text-xs text-slate-600">💡 {outcome.lesson}</div>
-              {!outcome.success && outcome.recovery && (
-                <div className="mt-2">
-                  <div className="text-xs text-amber-800">Recovery: {outcome.recovery}</div>
-                  {strategy === 'solo' && <button onClick={() => { setStrategy('partners'); runRaise('partners'); }} className="mt-2 rounded-md border border-amber-400 px-2 py-1 text-xs font-medium text-amber-800 hover:bg-amber-100">Bring in capital partners and re-raise</button>}
-                </div>
-              )}
-            </div>
-          )}
-        </>
-      )}
-    </div>
   );
 }
 
