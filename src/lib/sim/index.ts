@@ -8,3 +8,4 @@ export * from './personas';
 export * from './detailedUW';
 export * from './gameEngine';
 export * from './encounters';
+export * from './scenarios';

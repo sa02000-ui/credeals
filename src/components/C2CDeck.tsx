@@ -3,78 +3,69 @@
 import { useMemo, useState } from 'react';
 import { useApp } from '@/lib/store';
 import { useDealLocal } from '@/lib/hooks/useDealLocal';
+import { ScenarioRunner } from '@/components/ScenarioRunner';
 import { ClosingScorecardModal } from '@/components/ClosingScorecardModal';
 import {
-  buildC2CDeck,
+  buildC2CScenarios,
   C2C_DAY_BUDGET,
   defaultDetailedInputs,
   resolveClosing,
   runDetailedUW,
-  usd,
   type ClosingResult,
-  type DeckOption,
+  type ScenarioEffects,
   type MarketDeal,
 } from '@/lib/sim';
 
 interface PSAState { done: boolean; caught: string[]; missed: string[] }
-interface DeckState { choices: Record<string, string> }
+interface DeckState { idx: number; flags: Record<string, boolean>; days: number }
 interface Scenario { inputs: Parameters<typeof runDetailedUW>[0] }
 
-/** E3 — the Contract-to-Close decision deck (game mode), feeding E4 closing resolution. */
+/** E3 — the Contract-to-Close decision deck (game mode): a sequence of branching scenarios → E4. */
 export function C2CDeck({ deal }: { deal: MarketDeal }) {
   const { difficulty, game, applyGameOutcome, setStatus, statusOf } = useApp();
   const [psa] = useDealLocal<PSAState>('psa', deal.id, { done: false, caught: [], missed: [] });
-  const [deckState, setDeckState] = useDealLocal<DeckState>('c2cdeck', deal.id, { choices: {} });
+  const [state, setState] = useDealLocal<DeckState>('c2cdeck-v2', deal.id, { idx: 0, flags: {}, days: 5 });
   const [scenarios] = useDealLocal<Scenario[]>('uw-scenarios-v2', deal.id, [{ inputs: defaultDetailedInputs(deal) }]);
   const [scorecard, setScorecard] = useState<ClosingResult | null>(null);
 
   const deck = useMemo(
-    () => buildC2CDeck({ market: game.market, difficulty: difficulty ?? 'standard', missedPSATraps: psa.missed.length }),
+    () => buildC2CScenarios({ market: game.market, difficulty: difficulty ?? 'standard', missedPSATraps: psa.missed.length }),
     [game.market, difficulty, psa.missed.length],
   );
 
-  const chosen = deckState.choices;
-  const current = deck.find((c) => !chosen[c.id]) ?? null;
-  const allDone = deck.every((c) => chosen[c.id]);
+  const current = deck[state.idx] ?? null;
+  const allDone = state.idx >= deck.length;
   const closed = statusOf(deal.id) === 'am';
+  const archived = statusOf(deal.id) === 'archived';
 
-  function pick(cardId: string, opt: DeckOption) {
-    if (opt.effect.ends === 'walk') {
-      applyGameOutcome({ dealId: deal.id, repDelta: { broker: -3 }, event: { title: `Walked: ${deal.name}`, detail: opt.result, lesson: 'Walking protects capital. Sometimes the discipline to pass is the best move.' } });
+  function onEffects(e: ScenarioEffects) {
+    if (e.cash || e.rep) applyGameOutcome({ dealId: deal.id, cashDelta: e.cash, cashLabel: `${current?.title} — ${deal.name}`, repDelta: e.rep });
+    if (e.days) setState((s) => ({ ...s, days: s.days + (e.days ?? 0) }));
+  }
+
+  function onComplete(flags: Record<string, boolean>) {
+    const merged = { ...state.flags, ...flags };
+    if (flags.walk) {
+      applyGameOutcome({ dealId: deal.id, repDelta: { broker: -3 }, event: { title: `Walked: ${deal.name}`, detail: 'You walked from the deal.', lesson: 'Walking protects capital. The discipline to pass is a skill.' } });
       setStatus(deal.id, 'archived');
+      setState((s) => ({ ...s, flags: merged }));
       return;
     }
-    applyGameOutcome({
-      dealId: deal.id,
-      cashDelta: opt.effect.cash,
-      cashLabel: `${current?.title} — ${deal.name}`,
-      repDelta: opt.effect.rep,
-      event: { title: `${current?.title}: ${opt.label}`, detail: opt.result },
-    });
-    setDeckState((s) => ({ choices: { ...s.choices, [cardId]: opt.id } }));
+    setState((s) => ({ ...s, idx: s.idx + 1, flags: merged }));
   }
 
   function review() {
-    // aggregate closing factors from the choices
-    let totalDays = 5;
-    let contingenciesCleared = false;
-    let raiseFunded = false;
-    let ddDone = false;
-    let lenderOk = false;
-    let appraisalOk = false;
-    for (const c of deck) {
-      const opt = c.options.find((o) => o.id === chosen[c.id]);
-      if (!opt) continue;
-      totalDays += opt.effect.days ?? 0;
-      if (opt.effect.closing?.raiseFunded) raiseFunded = true;
-      if (opt.effect.closing?.ddDone) ddDone = true;
-      if (c.id === 'lender' && opt.effect.closing?.contingenciesCleared) lenderOk = true;
-      if (c.id === 'appraisal' && opt.effect.closing?.contingenciesCleared) appraisalOk = true;
-    }
-    contingenciesCleared = lenderOk && appraisalOk;
+    const f = state.flags;
     const total = psa.caught.length + psa.missed.length;
     const psaProtection = total > 0 ? psa.caught.length / total : 0.5;
-    const result = resolveClosing({ contingenciesCleared, raiseFunded, onTime: totalDays <= C2C_DAY_BUDGET, psaProtection, ddDone, difficulty: difficulty ?? 'standard' });
+    const result = resolveClosing({
+      contingenciesCleared: !!(f.lenderCleared && f.appraisalResolved),
+      raiseFunded: !!f.raiseFunded,
+      onTime: state.days <= C2C_DAY_BUDGET,
+      psaProtection,
+      ddDone: !!f.ddDone,
+      difficulty: difficulty ?? 'standard',
+    });
     setScorecard(result);
   }
 
@@ -83,40 +74,21 @@ export function C2CDeck({ deal }: { deal: MarketDeal }) {
     return { leveredIRR: r.leveredIRR, equityMultiple: r.equityMultiple, avgCashOnCash: r.avgCashOnCash };
   }, [scenarios, deal]);
 
-  if (closed) {
-    return <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">✅ Closed — the asset is in your portfolio. Head to Asset Management.</div>;
-  }
+  if (closed) return <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">✅ Closed — the asset is in your portfolio. Head to Asset Management.</div>;
+  if (archived) return <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">This deal was archived during the close. Pick another deal from the feed.</div>;
 
   return (
-    <div className="mt-4 rounded-lg border-2 border-emerald-200 bg-emerald-50/30 p-4">
+    <div className="rounded-xl border-2 border-emerald-300 bg-emerald-50/40 p-4">
       <div className="mb-2 flex items-center gap-2">
-        <h3 className="text-sm font-bold text-slate-800">🃏 Close the deal — decisions</h3>
-        <span className="text-xs text-slate-500">{Object.keys(chosen).length}/{deck.length} resolved</span>
+        <h3 className="text-base font-bold text-slate-900">🃏 Close the deal — live decisions</h3>
+        <span className="ml-auto text-xs text-slate-500">{Math.min(state.idx, deck.length)}/{deck.length} cleared · day cost {state.days}d</span>
       </div>
 
       {current ? (
-        <div className="rounded-xl border border-slate-200 bg-white p-4">
-          <div className="text-xs font-semibold uppercase tracking-wide text-emerald-600">{current.title}</div>
-          <p className="mt-1 text-sm text-slate-700">{current.prompt}</p>
-          <div className="mt-3 space-y-2">
-            {current.options.map((opt) => (
-              <button key={opt.id} onClick={() => pick(current.id, opt)} className="block w-full rounded-lg border border-slate-200 p-3 text-left transition hover:border-slate-900 hover:bg-slate-50">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-semibold text-slate-800">{opt.label}</span>
-                  <span className="flex items-center gap-2 text-[11px]">
-                    {opt.effect.cash ? <span className="text-red-600 tabular-nums">{usd(opt.effect.cash, { compact: true })}</span> : null}
-                    {opt.effect.days ? <span className="text-slate-400">+{opt.effect.days}d</span> : null}
-                    <span className={`rounded px-1.5 py-0.5 ${opt.tone === 'good' ? 'bg-emerald-100 text-emerald-700' : opt.tone === 'warn' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>{opt.tone}</span>
-                  </span>
-                </div>
-                <p className="mt-0.5 text-xs text-slate-500">{opt.detail}</p>
-              </button>
-            ))}
-          </div>
-        </div>
+        <ScenarioRunner key={current.id} scenario={current} onEffects={onEffects} onComplete={onComplete} />
       ) : allDone ? (
         <div className="rounded-xl border border-slate-200 bg-white p-4 text-center">
-          <p className="text-sm text-slate-700">All decisions made. Time to close.</p>
+          <p className="text-sm text-slate-700">All decisions made — time to close.</p>
           <button onClick={review} className="mt-2 rounded-lg bg-emerald-600 px-5 py-2 text-sm font-semibold text-white hover:bg-emerald-700">Go to the closing table →</button>
         </div>
       ) : null}
@@ -132,7 +104,7 @@ export function C2CDeck({ deal }: { deal: MarketDeal }) {
             setStatus(deal.id, 'am');
             setScorecard(null);
           }}
-          onRecover={() => { setDeckState({ choices: {} }); setScorecard(null); }}
+          onRecover={() => { setState((s) => ({ ...s, idx: Math.max(0, deck.length - 1), flags: { ...s.flags } })); setScorecard(null); }}
           onClose={() => setScorecard(null)}
         />
       )}

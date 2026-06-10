@@ -11,7 +11,6 @@ import { CareerHud } from '@/components/CareerHud';
 import { GameStartModal } from '@/components/GameStartModal';
 import { ObjectiveHud } from '@/components/ObjectiveHud';
 import { useApp } from '@/lib/store';
-import { InfoTip } from '@/components/InfoTip';
 import { stageDef } from '@/lib/sim';
 
 function scrollTo(id: string) {
@@ -142,7 +141,6 @@ function LifecycleNav({
                     step.label
                   )}
                 </button>
-                <InfoTip k={step.info} />
               </span>
               {i < LIFECYCLE.length - 1 && <span className="mx-0.5 text-indigo-300">›</span>}
             </div>

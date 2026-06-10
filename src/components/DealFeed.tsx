@@ -58,11 +58,11 @@ export function DealFeed({
             <div key={stage.id}>
               <button
                 onClick={() => setCollapsed((c) => ({ ...c, [stage.id]: !c[stage.id] }))}
-                className={`flex w-full items-center gap-2 border-l-4 px-3 py-2.5 text-left ${ACCENT[stage.color]}`}
+                className={`flex w-full items-center gap-2 border-l-[6px] px-3 py-3 text-left ${ACCENT[stage.color]}`}
               >
-                <span className="text-sm text-slate-500">{isCollapsed ? '▸' : '▾'}</span>
-                <span className="text-sm font-bold uppercase tracking-wide text-slate-900">{stage.label}</span>
-                <span className="ml-auto rounded-full bg-white px-2 py-0.5 text-xs font-bold text-slate-700 shadow-sm">
+                <span className="text-base text-slate-600">{isCollapsed ? '▸' : '▾'}</span>
+                <span className="text-base font-extrabold uppercase tracking-wide text-slate-900">{stage.label}</span>
+                <span className="ml-auto rounded-full bg-white px-2.5 py-0.5 text-sm font-extrabold text-slate-800 shadow-sm">
                   {items.length}
                 </span>
               </button>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useApp } from '@/lib/store';
 import { InfoTip } from '@/components/InfoTip';
 import { NapkinPanel } from '@/components/NapkinPanel';
@@ -28,6 +28,13 @@ export function DealPhases({ deal, onOpenConversation }: { deal: MarketDeal; onO
   const status = statusOf(deal.id);
   const unlockedThrough = status === 'archived' ? 0 : Math.max(0, stageIndex(status));
   const [phase, setPhase] = useState<Tab>(status === 'new' || status === 'archived' ? 'napkin' : status);
+
+  // Guided flow: when the deal advances a stage (e.g. "Pass napkin → Detailed UW"), follow it to that tab.
+  const prevStatus = useRef(status);
+  useEffect(() => {
+    if (status !== prevStatus.current && status !== 'new' && status !== 'archived') setPhase(status);
+    prevStatus.current = status;
+  }, [status]);
 
   return (
     <div className="space-y-3">

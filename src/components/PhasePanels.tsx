@@ -166,6 +166,14 @@ export function C2CPanel({ deal }: { deal: MarketDeal }) {
 
   return (
     <PhaseShell title="Contract to Close" info="step.c2c" subtitle="Upload the signed PSA, anchor the critical-dates calendar, and drive every workstream to the closing table.">
+      {/* Game-mode: the live decision deck leads (the planner below is reference) */}
+      {mode === 'game' && (
+        <div className="mb-4">
+          <C2CDeck deal={deal} />
+          <p className="mt-2 text-[11px] text-slate-400">The critical-dates planner below is your reference; the decisions above drive the close.</p>
+        </div>
+      )}
+
       {/* PSA + start date */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="rounded-lg border border-slate-200 p-3">
@@ -273,8 +281,6 @@ export function C2CPanel({ deal }: { deal: MarketDeal }) {
         </table>
       </div>
       {people.length === 0 && <p className="mt-2 text-[11px] text-slate-400">Tip: add partners/teammates in “👥 People &amp; access” above to assign them as task leads.</p>}
-
-      {mode === 'game' && <C2CDeck deal={deal} />}
     </PhaseShell>
   );
 }

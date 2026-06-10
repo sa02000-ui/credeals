@@ -6,7 +6,7 @@ import { usd } from '@/lib/sim';
 import { AuthStatus } from '@/components/AuthStatus';
 
 export function TopBar() {
-  const { mode, setMode, cashBalance, day, resetAll, isAdmin, difficulty, clockPaused, setClockPaused } = useApp();
+  const { mode, setMode, cashBalance, day, resetAll, isAdmin, difficulty, clockPaused, setClockPaused, clockMinutesPerDay, setClockSpeed } = useApp();
   const low = cashBalance < 25_000;
 
   return (
@@ -32,36 +32,41 @@ export function TopBar() {
               ★ Admin
             </Link>
           )}
-          {/* Treasury — game mode only (see DESIGN §4.5) */}
+          {/* Prominent cash + clock HUD — game mode only (off in real mode) */}
           {mode === 'game' && (
-            <div
-              className={`rounded-lg border px-3 py-1.5 text-right ${
-                low ? 'border-red-300 bg-red-50' : 'border-slate-200 bg-slate-50'
-              }`}
-              title="Simulated bank balance. Outflows: pursuit/diligence costs, EMD. Off in real mode."
-            >
-              <div className="text-[10px] uppercase tracking-wide text-slate-500">Cash on hand</div>
-              <div className={`text-sm font-semibold ${low ? 'text-red-600' : 'text-slate-900'}`}>
-                {usd(cashBalance)}
+            <div className="flex items-stretch gap-2">
+              <div
+                className={`flex flex-col justify-center rounded-xl border-2 px-4 py-1.5 text-right ${low ? 'border-red-400 bg-red-50' : 'border-emerald-300 bg-emerald-50'}`}
+                title="Simulated bank balance. Outflows: carrying costs, pursuit/diligence, EMD. Off in real mode."
+              >
+                <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500">💵 Cash</div>
+                <div className={`text-lg font-extrabold leading-none tabular-nums ${low ? 'text-red-600' : 'text-emerald-700'}`}>{usd(cashBalance)}</div>
               </div>
-            </div>
-          )}
-          {/* Day + pausable clock — game mode only (no simulated time in real mode) */}
-          {mode === 'game' && (
-            <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1">
-              <div className="text-right">
-                <div className="text-[10px] uppercase tracking-wide text-slate-500">Day</div>
-                <div className="text-sm font-semibold tabular-nums">{day}</div>
+              <div className="flex items-center gap-2 rounded-xl border-2 border-indigo-300 bg-indigo-50 px-3 py-1.5">
+                <div className="text-right">
+                  <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500">📅 Day</div>
+                  <div className="text-lg font-extrabold leading-none tabular-nums text-indigo-700">{day}</div>
+                </div>
+                {difficulty && (
+                  <div className="flex flex-col items-center gap-0.5">
+                    <button
+                      onClick={() => setClockPaused(!clockPaused)}
+                      title={clockPaused ? 'Resume the clock' : 'Pause the clock'}
+                      className={`grid h-7 w-7 place-items-center rounded-md border text-sm ${clockPaused ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-amber-300 bg-amber-50 text-amber-700'}`}
+                    >
+                      {clockPaused ? '▶' : '⏸'}
+                    </button>
+                    <select
+                      value={clockMinutesPerDay}
+                      onChange={(e) => setClockSpeed(Number(e.target.value))}
+                      title="Real minutes per simulated day"
+                      className="rounded border border-indigo-200 bg-white px-0.5 text-[10px] text-slate-600 focus:outline-none"
+                    >
+                      {[2, 5, 10].map((s) => (<option key={s} value={s}>{s}m/d</option>))}
+                    </select>
+                  </div>
+                )}
               </div>
-              {difficulty && (
-                <button
-                  onClick={() => setClockPaused(!clockPaused)}
-                  title={clockPaused ? 'Resume the clock' : 'Pause the clock'}
-                  className={`grid h-7 w-7 place-items-center rounded-md border text-sm ${clockPaused ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-amber-300 bg-amber-50 text-amber-700'}`}
-                >
-                  {clockPaused ? '▶' : '⏸'}
-                </button>
-              )}
             </div>
           )}
 

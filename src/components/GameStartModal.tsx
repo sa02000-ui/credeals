@@ -1,16 +1,20 @@
 'use client';
 
+import { useState } from 'react';
 import { useApp } from '@/lib/store';
 import { DIFFICULTY_INFO, usd, type Difficulty } from '@/lib/sim';
 
+const SPEEDS = [2, 5, 10]; // real minutes per simulated day
+
 /**
  * Shown once when a game hasn't been started (game mode + no difficulty chosen). Gives the high-level
- * goal + how-to-play, then asks the player to pick a difficulty (DESIGN §22 C/H). After this the
- * Objective/Coach HUD takes over and the clock starts.
+ * goal + how-to-play, then asks the player to pick a difficulty + clock pace (DESIGN §22 C/H). After
+ * this the Objective/Coach HUD takes over and the clock starts.
  */
 export function GameStartModal() {
   const { startGame, setMode } = useApp();
   const order: Difficulty[] = ['guided', 'standard', 'expert'];
+  const [speed, setSpeed] = useState(2);
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4">
@@ -23,18 +27,27 @@ export function GameStartModal() {
 
         {/* 3-card intro */}
         <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <IntroCard icon="🎯" title="Goal" body="Build net worth. Close good deals, operate them well, and exit for a profit." />
-          <IntroCard icon="🔁" title="How it works" body="Source → underwrite → offer → negotiate → close → operate → sell. Repeat, bigger each time." />
-          <IntroCard icon="⏱️" title="Heads-up" body="A clock ticks and things cost money from your starting capital. You can pause anytime and resume." />
+          <IntroCard icon="🎯" title="Goal" body="Build net worth. Close good deals, operate them well, and exit for a profit — then do it again, bigger." />
+          <IntroCard icon="🔁" title="How it works" body="Source a deal → underwrite it → submit an LOI and negotiate → sign the PSA → close → operate → sell. The app prompts you each step." />
+          <IntroCard icon="⏱️" title="Time = money" body="A clock ticks in real time: every simulated DAY is a few real MINUTES. Carrying costs and diligence drain your cash as days pass — move with purpose. Pause anytime; you resume right where you left." />
+        </div>
+
+        {/* Clock pace */}
+        <h3 className="mt-6 text-sm font-semibold text-slate-800">Clock pace</h3>
+        <p className="text-[11px] text-slate-500">How many real minutes equal one simulated day. Slower = more time to think.</p>
+        <div className="mt-1.5 flex gap-2">
+          {SPEEDS.map((s) => (
+            <button key={s} onClick={() => setSpeed(s)} className={`rounded-lg border-2 px-3 py-1.5 text-sm font-semibold ${speed === s ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}>{s} min / day</button>
+          ))}
         </div>
 
         {/* Difficulty */}
-        <h3 className="mt-6 text-sm font-semibold text-slate-800">Choose your difficulty</h3>
+        <h3 className="mt-5 text-sm font-semibold text-slate-800">Choose your difficulty to begin</h3>
         <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
           {order.map((d) => {
             const info = DIFFICULTY_INFO[d];
             return (
-              <button key={d} onClick={() => startGame(d)} className="rounded-xl border-2 border-slate-200 p-3 text-left transition hover:border-slate-900 hover:bg-slate-50">
+              <button key={d} onClick={() => startGame(d, speed)} className="rounded-xl border-2 border-slate-200 p-3 text-left transition hover:border-slate-900 hover:bg-slate-50">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-bold text-slate-900">{info.label}</span>
                   <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-semibold text-slate-600">{usd(info.startingCash, { compact: true })}</span>
