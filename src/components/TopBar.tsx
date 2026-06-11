@@ -7,7 +7,8 @@ import { treasuryBalance, usd } from '@/lib/sim';
 import { AuthStatus } from '@/components/AuthStatus';
 
 export function TopBar() {
-  const { mode, setMode, cashBalance, day, resetAll, isAdmin, difficulty, clockPaused, setClockPaused, clockMinutesPerDay, setClockSpeed, treasury } = useApp();
+  const { mode, setMode, cashBalance, day, resetAll, isAdmin, difficulty, clockPaused, setClockPaused, clockMinutesPerDay, setClockSpeed, treasury, gameEnabled } = useApp();
+  const showGameUi = gameEnabled || isAdmin;
   const low = cashBalance < 25_000;
   const [showLedger, setShowLedger] = useState(false);
   const carryingCost = treasuryBalance(treasury) - cashBalance; // accumulated daily carrying costs
@@ -97,25 +98,34 @@ export function TopBar() {
             </div>
           )}
 
-          {/* Mode toggle */}
-          <div className="flex rounded-lg border border-slate-300 p-0.5 text-xs font-medium">
-            <button
-              onClick={() => setMode('game')}
-              className={`rounded-md px-3 py-1 ${
-                mode === 'game' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'
-              }`}
-            >
-              🎮 Game
-            </button>
-            <button
-              onClick={() => setMode('real')}
-              className={`rounded-md px-3 py-1 ${
-                mode === 'real' ? 'bg-emerald-600 text-white' : 'text-slate-600 hover:bg-slate-100'
-              }`}
-            >
-              🏢 Real
-            </button>
-          </div>
+          {/* Mode toggle — hidden entirely when the admin has switched the game off (admins still see it) */}
+          {showGameUi && (
+            <div className="flex items-center gap-1">
+              <div className="flex rounded-lg border border-slate-300 p-0.5 text-xs font-medium">
+                <button
+                  onClick={() => setMode('game')}
+                  className={`rounded-md px-3 py-1 ${
+                    mode === 'game' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  🎮 Game
+                </button>
+                <button
+                  onClick={() => setMode('real')}
+                  className={`rounded-md px-3 py-1 ${
+                    mode === 'real' ? 'bg-emerald-600 text-white' : 'text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  🏢 Real
+                </button>
+              </div>
+              {!gameEnabled && isAdmin && (
+                <span className="rounded bg-red-100 px-1.5 py-0.5 text-[9px] font-bold text-red-700" title="Game mode is hidden from users (admin-only preview). Toggle in Admin.">
+                  hidden
+                </span>
+              )}
+            </div>
+          )}
 
           {/* Reset is a game-mode concept (resets simulated progress); nothing to reset on live deals */}
           {mode === 'game' && (

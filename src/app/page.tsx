@@ -30,8 +30,14 @@ export default function Landing() {
   const [marketRent, setMarketRent] = useState(1200);
   const [marketCap, setMarketCap] = useState(0.065);
 
+  const [gameEnabled, setGameEnabled] = useState(true);
+
   useEffect(() => {
     setLoggedIn(!!readCookieSession());
+    fetch('/api/settings')
+      .then((r) => r.json())
+      .then((j) => setGameEnabled(j?.settings?.gameEnabled !== false))
+      .catch(() => {});
   }, []);
 
   async function analyze(e: React.FormEvent) {
@@ -110,9 +116,11 @@ export default function Landing() {
           <span className="font-semibold">CRE Deals</span>
         </div>
         <div className="flex items-center gap-2 text-sm">
-          <button onClick={() => enter('game')} className="rounded-lg bg-amber-400 px-3 py-1.5 font-semibold text-slate-900 hover:bg-amber-300">
-            🎮 Play Simulation
-          </button>
+          {gameEnabled && (
+            <button onClick={() => enter('game')} className="rounded-lg bg-amber-400 px-3 py-1.5 font-semibold text-slate-900 hover:bg-amber-300">
+              🎮 Play Simulation
+            </button>
+          )}
           <button onClick={() => enter('real')} className="rounded-lg bg-emerald-400 px-3 py-1.5 font-semibold text-slate-900 hover:bg-emerald-300">
             🏢 Live Deal
           </button>

@@ -23,7 +23,7 @@ interface Scenario { inputs: Parameters<typeof runDetailedUW>[0] }
 
 /** E3 — the Contract-to-Close decision deck (game mode): a sequence of branching scenarios → E4. */
 export function C2CDeck({ deal }: { deal: MarketDeal }) {
-  const { difficulty, game, applyGameOutcome, setStatus, statusOf } = useApp();
+  const { difficulty, game, applyGameOutcome, setStatus, statusOf, advanceDays } = useApp();
   const [psa] = useDealLocal<PSAState>('psa', deal.id, { done: false, caught: [], missed: [] });
   const [state, setState] = useDealLocal<DeckState>('c2cdeck-v2', deal.id, { idx: 0, flags: {}, days: 5 });
   const [scenarios] = useDealLocal<Scenario[]>('uw-scenarios-v2', deal.id, [{ inputs: defaultDetailedInputs(deal) }]);
@@ -51,7 +51,10 @@ export function C2CDeck({ deal }: { deal: MarketDeal }) {
 
   function onEffects(e: ScenarioEffects) {
     if (e.cash || e.rep) applyGameOutcome({ dealId: deal.id, cashDelta: e.cash, cashLabel: `${current?.title} — ${deal.name}`, repDelta: e.rep });
-    if (e.days) setState((s) => ({ ...s, days: s.days + (e.days ?? 0) }));
+    if (e.days) {
+      setState((s) => ({ ...s, days: s.days + (e.days ?? 0) })); // deal-level on-time tracking
+      advanceDays(e.days); // the global clock moves too — decisions consume real time
+    }
   }
 
   function onComplete(flags: Record<string, boolean>) {

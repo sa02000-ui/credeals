@@ -476,7 +476,7 @@ export function AMPanel({ deal }: { deal: MarketDeal }) {
 
 /** Game-mode operating surprises during the hold — plays admin-authored 'am' scenarios in order. */
 function OperatingEvents({ deal }: { deal: MarketDeal }) {
-  const { applyGameOutcome, setStatus } = useApp();
+  const { applyGameOutcome, setStatus, advanceDays } = useApp();
   const [events, setEvents] = useState<AuthoredScenario[]>([]);
   const [cursor, setCursor] = useDealLocal<number>('am-events', deal.id, 0);
 
@@ -491,6 +491,7 @@ function OperatingEvents({ deal }: { deal: MarketDeal }) {
 
   function onEffects(e: ScenarioEffects) {
     if (e.cash || e.rep) applyGameOutcome({ dealId: deal.id, cashDelta: e.cash, cashLabel: `${current?.title} — ${deal.name}`, repDelta: e.rep });
+    if (e.days) advanceDays(e.days);
   }
   function onComplete(flags: Record<string, boolean>) {
     if (flags.walk || flags.sell) {

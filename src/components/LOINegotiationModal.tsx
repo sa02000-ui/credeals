@@ -23,7 +23,7 @@ export function LOINegotiationModal({
   onLost: () => void;
   onClose: () => void;
 }) {
-  const { game } = useApp();
+  const { game, advanceDays } = useApp();
   const [terms, setTerms] = useState<LOITerms>(initialTerms);
   const [round, setRound] = useState(1);
   const [cp, setCp] = useState(0);
@@ -43,6 +43,7 @@ export function LOINegotiationModal({
   const responsiveness = awaiting ? Math.max(0, 1 - elapsed / WINDOW_MS) : 1;
 
   function send(currentTerms: LOITerms) {
+    advanceDays(1); // every negotiation round consumes a day
     const r = negotiateLOI({ terms: currentTerms, askPrice, seller, market: game.market, brokerRep: game.reputation.broker, responsiveness, round, competingPressure: cp });
     setCp(r.competingPressure);
     setResult(r);

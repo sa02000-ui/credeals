@@ -75,6 +75,13 @@ export async function POST(request: Request) {
         if (error) throw error;
         return NextResponse.json({ ok: true });
       }
+      case 'set-setting': {
+        const { key, value } = body as { key?: string; value?: unknown };
+        if (!key) return bad('key required');
+        const { error } = await sb.from('app_settings').upsert({ key, value, updated_at: new Date().toISOString() } as never);
+        if (error) throw error;
+        return NextResponse.json({ ok: true });
+      }
       case 'deactivate': {
         const { userId } = body as { userId?: string };
         if (!userId) return bad('userId required');

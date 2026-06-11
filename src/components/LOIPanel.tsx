@@ -213,7 +213,7 @@ export function LOIPanel({ deal }: { deal: MarketDeal }) {
   const [edited, setEdited] = useState<string | null>(null);
   const text = edited ?? generated;
 
-  const { mode, difficulty, applyGameOutcome, setStatus, statusOf, addFiles, filesOf } = useApp();
+  const { mode, difficulty, applyGameOutcome, setStatus, statusOf, addFiles, filesOf, advanceDays } = useApp();
   const { seller } = dealCounterparties(deal.id);
   const [celebrate, setCelebrate] = useState(false);
   const [negotiating, setNegotiating] = useState(false);
@@ -228,6 +228,7 @@ export function LOIPanel({ deal }: { deal: MarketDeal }) {
     set({ purchasePrice: finalTerms.price, emdAmount: Math.round(finalTerms.emdPct * finalTerms.price), ddDays: finalTerms.ddDays, closeDays: finalTerms.closeDays, finContingencyEnabled: finalTerms.financingContingency });
     applyGameOutcome({ dealId: deal.id, pursued: true, repDelta: { broker: 3 }, cashDelta: -Math.round(finalTerms.emdPct * finalTerms.price), cashLabel: `Earnest money — ${deal.name}`, event: { title: `LOI accepted: ${deal.name}`, detail: `Terms agreed at ${usd(finalTerms.price)}.`, lesson: 'LOI accepted — next the seller’s counsel sends the PSA. Read it carefully.' } });
     setNegotiating(false);
+    advanceDays(2); // papering the accepted LOI takes a couple of days
     setPsaClauses(buildPSA(difficulty ?? 'standard'));
   }
   function onLoiLost() {
@@ -238,6 +239,7 @@ export function LOIPanel({ deal }: { deal: MarketDeal }) {
   function onPsaDone(caught: string[], missed: string[]) {
     setPsaState({ done: true, caught, missed });
     setPsaClauses(null);
+    advanceDays(5); // PSA drafting + attorney redline rounds take days
     setStatus(deal.id, 'c2c');
   }
 

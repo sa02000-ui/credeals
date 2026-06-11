@@ -90,6 +90,8 @@ const INITIAL: AppState = {
 interface AppContextValue extends AppState {
   deals: MarketDeal[];
   cashBalance: number;
+  /** admin feature flag: is game mode visible to users at all */
+  gameEnabled: boolean;
   setMode: (m: SimMode) => void;
   setAdmin: (v: boolean) => void;
   setMarket: (m: MarketCondition) => void;
@@ -97,6 +99,8 @@ interface AppContextValue extends AppState {
   setClockPaused: (v: boolean) => void;
   setClockSpeed: (minutesPerDay: number) => void;
   setSelectedDeal: (id: string | null) => void;
+  /** advance the simulated clock by n days (actions cost time — DESIGN §22 F) */
+  advanceDays: (n: number) => void;
   applyGameOutcome: (o: GameOutcome) => void;
   updateBuyBox: (patch: Partial<BuyBox>) => void;
   approveBuyBox: () => void;
@@ -128,6 +132,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // DB-backed deals (kept out of localStorage). null = not loaded / local mode.
   const [dbDeals, setDbDeals] = useState<MarketDeal[] | null>(null);
   const [dbStages, setDbStages] = useState<Record<string, DealStatus>>({});
+  const [gameEnabled, setGameEnabled] = useState(true);
+
+  // Global feature flags (admin-controlled): is game mode visible at all?
+  useEffect(() => {
+    let on = true;
+    fetch('/api/settings')
+      .then((r) => r.json())
+      .then((j) => { if (on && j?.ok) setGameEnabled(j.settings?.gameEnabled !== false); })
+      .catch(() => {});
+    return () => { on = false; };
+  }, []);
+
+  // When the game is switched off and the user isn't an admin, force real mode.
+  useEffect(() => {
+    if (!hydrated) return;
+    if (!gameEnabled && !state.isAdmin && state.mode === 'game') {
+      setState((s) => ({ ...s, mode: 'real' }));
+    }
+  }, [hydrated, gameEnabled, state.isAdmin, state.mode]);
 
   useEffect(() => {
     let next: AppState = INITIAL;
@@ -235,10 +258,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
+    // Advancing a stage consumes simulated days (real work takes real time — owner 2026-06-10:
+    // "I was at day 1 and reached asset management; that never happens"). The C2C decision deck
+    // and scenario effects add their own days on top of these base costs.
+    const STAGE_DAY_COST: Partial<Record<DealStatus, number>> = { detailed: 2, loi: 3, c2c: 2 };
+
     function setStatus(dealId: string, status: DealStatus) {
       const prev = statusOf(dealId);
       if (prev === status) return;
       chargePursuit(dealId, status, prev);
+      const dayCost = STAGE_DAY_COST[status] ?? 0;
+      if (dayCost > 0 && state.mode === 'game') {
+        setState((s) => ({ ...s, day: s.day + dayCost }));
+      }
       if (configured) {
         setDbStages((m) => ({ ...m, [dealId]: status })); // optimistic
         updateDealStage(dealId, status).catch(() => {}); // RLS blocks non-editors — refined with user-assignment
@@ -268,6 +300,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setClockPaused: (v) => setState((s) => ({ ...s, clockPaused: v })),
       setClockSpeed: (minutesPerDay) => setState((s) => ({ ...s, clockMinutesPerDay: minutesPerDay })),
       setSelectedDeal: (id) => setState((s) => ({ ...s, selectedDealId: id })),
+      advanceDays: (n) => { if (n > 0) setState((s) => ({ ...s, day: s.day + Math.round(n) })); },
+      gameEnabled,
       applyGameOutcome: (o) =>
         setState((s) => {
           const treasuryEvents = [...s.treasury.events];
@@ -391,7 +425,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setState((s) => ({ ...s, people: { ...s.people, [dealId]: (s.people[dealId] ?? []).filter((p) => p.id !== id) } })),
       resetAll: () => setState(INITIAL),
     };
-  }, [state, hydrated, dbDeals, dbStages]);
+  }, [state, hydrated, dbDeals, dbStages, gameEnabled]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }

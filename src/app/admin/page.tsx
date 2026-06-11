@@ -44,6 +44,18 @@ export default function AdminPage() {
   const [members, setMembers] = useState<MemberRow[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  const [gameOn, setGameOn] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    fetch('/api/settings').then((r) => r.json()).then((j) => setGameOn(j?.settings?.gameEnabled !== false)).catch(() => setGameOn(true));
+  }, []);
+
+  async function toggleGame() {
+    const next = !(gameOn ?? true);
+    setGameOn(next);
+    const r = await callAdmin({ action: 'set-setting', key: 'gameEnabled', value: next });
+    if (!r.ok) { setGameOn(!next); setMsg(r.error ?? 'Failed to save setting (run migration 0003?)'); }
+  }
 
   const load = useCallback(async () => {
     try {
@@ -120,6 +132,23 @@ export default function AdminPage() {
       {msg && (
         <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{msg}</div>
       )}
+
+      {/* Feature flags */}
+      <div className="mb-4 flex items-center gap-3 rounded-xl border-2 border-slate-200 bg-white px-4 py-3">
+        <div>
+          <div className="text-sm font-bold text-slate-800">🎮 Game mode</div>
+          <p className="text-xs text-slate-500">When off, the game is hidden from everyone except admins — no Play Simulation button, no Game toggle; users see only Real mode.</p>
+        </div>
+        <button
+          onClick={toggleGame}
+          disabled={gameOn === null}
+          className={`ml-auto h-7 w-14 shrink-0 rounded-full p-0.5 transition ${gameOn ? 'bg-emerald-500' : 'bg-slate-300'} disabled:opacity-50`}
+          title={gameOn ? 'Game is visible — click to hide' : 'Game is hidden — click to show'}
+        >
+          <span className={`block h-6 w-6 rounded-full bg-white shadow transition-transform ${gameOn ? 'translate-x-7' : 'translate-x-0'}`} />
+        </button>
+        <span className={`w-14 text-xs font-bold ${gameOn ? 'text-emerald-600' : 'text-slate-400'}`}>{gameOn === null ? '…' : gameOn ? 'VISIBLE' : 'HIDDEN'}</span>
+      </div>
 
       {/* Stats */}
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
