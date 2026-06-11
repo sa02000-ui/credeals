@@ -63,8 +63,21 @@ export default function Home() {
         </div>
       )}
 
-      <main className={`mx-auto grid w-full max-w-7xl flex-1 gap-4 px-4 py-4 ${hideSidebar ? '' : 'lg:grid-cols-[340px_minmax(0,1fr)]'}`}>
-        {!hideSidebar && (
+      <main className={`mx-auto grid w-full max-w-7xl flex-1 gap-4 px-4 py-4 ${hideSidebar ? 'lg:grid-cols-[44px_minmax(0,1fr)]' : 'lg:grid-cols-[340px_minmax(0,1fr)]'}`}>
+        {hideSidebar ? (
+          /* Minimized rail — Detailed UW gets the room, one click expands the sidebar back */
+          <button
+            onClick={() => setSidebarPinned(true)}
+            title="Expand buy box & deal feed"
+            className="sticky top-32 flex items-center justify-center gap-1.5 self-start rounded-xl border border-slate-200 bg-white px-2 py-2 text-slate-500 hover:bg-slate-100 hover:text-slate-900 lg:flex-col lg:py-4"
+          >
+            <span className="text-sm">▸</span>
+            <span className="text-[10px] font-bold uppercase tracking-wide lg:hidden">📋 Buy Box &amp; Deals</span>
+            <span className="hidden text-[10px] font-bold uppercase tracking-wide lg:block" style={{ writingMode: 'vertical-rl' }}>
+              Buy Box &amp; Deals
+            </span>
+          </button>
+        ) : (
           <div className="space-y-4">
             <div id="nav-buybox" className="scroll-mt-32">
               <BuyBoxPanel />
@@ -92,15 +105,6 @@ export default function Home() {
         </div>
       </main>
 
-      {/* Sidebar is auto-hidden on Detailed UW — floating button brings it back */}
-      {hideSidebar && (
-        <button
-          onClick={() => setSidebarPinned(true)}
-          className="fixed bottom-4 left-4 z-40 rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-xl hover:bg-slate-100"
-        >
-          📋 Show buy box &amp; deals
-        </button>
-      )}
 
       <footer className="border-t border-slate-200 bg-white px-4 py-2 text-center text-[11px] text-slate-400">
         Massive Deal Sim · Slice 1 · napkin math ported from Synthesis · seeded demo deals

@@ -146,6 +146,9 @@ export interface DetailedUWInputs {
   /** growth-rate override (decimal) for a line id + year: replaces the global growth for that one
    *  year's step (value_y = value_{y-1} × (1 + rate)); compounds forward like Excel */
   growthOverrides?: Record<string, Record<number, number>>;
+  /** T-12 / T-6 / T-3 actuals per line (annualized $), the reference column for the proforma.
+   *  Hand-entered now; auto-filled (with a mapping review) when AI parsing reads the uploads. */
+  t12Ref?: Record<string, number>;
 }
 
 export interface UWYear {

@@ -61,8 +61,7 @@ export function DetailedUWPanel({ deal }: { deal: MarketDeal }) {
   const [loiRecord] = useDealLocal<{ financing: 'new' | 'assumption'; purchasePrice: number }>('loi', deal.id, { financing: 'new', purchasePrice: deal.askPrice });
   const loiSaysAssumption = loiRecord.financing === 'assumption' && inp.financingType !== 'assumption';
 
-  // per-line, per-year proforma overrides (open by default — this grid is the heart of the model)
-  const [showYearDetail, setShowYearDetail] = useState(true);
+  // per-line, per-year proforma overrides — drives the integrated Statement table
   const setYearOverride = (lineId: string, year: number, value: number) => {
     const cur = inp.lineOverrides ?? {};
     set({ lineOverrides: { ...cur, [lineId]: { ...(cur[lineId] ?? {}), [year]: value } } });
@@ -75,10 +74,18 @@ export function DetailedUWPanel({ deal }: { deal: MarketDeal }) {
   };
   const isOverridden = (lineId: string, year: number) => inp.lineOverrides?.[lineId]?.[year] != null;
 
-  // per-cell growth-assumption overrides (the % applied for that year's step)
+  // per-cell growth-assumption overrides (the % applied for that year's step).
+  // Setting a growth % also clears any $ override on the same cell so the % drives the value
+  // (and the displayed % stays accurate — owner 2026-06-10).
   const setGrowthOverride = (lineId: string, year: number, rate: number) => {
-    const cur = inp.growthOverrides ?? {};
-    set({ growthOverrides: { ...cur, [lineId]: { ...(cur[lineId] ?? {}), [year]: rate } } });
+    const gCur = inp.growthOverrides ?? {};
+    const cCur = inp.lineOverrides ?? {};
+    const cashForLine = { ...(cCur[lineId] ?? {}) };
+    delete cashForLine[year];
+    set({
+      growthOverrides: { ...gCur, [lineId]: { ...(gCur[lineId] ?? {}), [year]: rate } },
+      lineOverrides: { ...cCur, [lineId]: cashForLine },
+    });
   };
   const clearGrowthOverride = (lineId: string, year: number) => {
     const cur = inp.growthOverrides ?? {};
@@ -87,7 +94,14 @@ export function DetailedUWPanel({ deal }: { deal: MarketDeal }) {
     set({ growthOverrides: { ...cur, [lineId]: forLine } });
   };
   const isGrowthOverridden = (lineId: string, year: number) => inp.growthOverrides?.[lineId]?.[year] != null;
-  const growthOf = (lineId: string, year: number, globalGrowth: number) => inp.growthOverrides?.[lineId]?.[year] ?? globalGrowth;
+
+  // T-12 / T-6 / T-3 actuals reference column (hand-entered until AI parsing fills it)
+  const setT12 = (lineId: string, v: number | undefined) => {
+    const cur = { ...(inp.t12Ref ?? {}) };
+    if (v == null || Number.isNaN(v)) delete cur[lineId];
+    else cur[lineId] = v;
+    set({ t12Ref: cur });
+  };
 
   const anyOverrides =
     Object.values(inp.lineOverrides ?? {}).some((m) => Object.keys(m).length > 0) ||
@@ -219,7 +233,7 @@ export function DetailedUWPanel({ deal }: { deal: MarketDeal }) {
       </div>
 
       {/* Income | Expenses — side by side on wide screens */}
-      <div className="grid grid-cols-1 border-b border-slate-200 xl:grid-cols-2 xl:divide-x xl:divide-slate-200">
+      <div className="grid grid-cols-1 border-b border-slate-200 lg:grid-cols-2 lg:divide-x lg:divide-slate-200">
       <Section id="uw-income" title="Income" info="m.noi" color="emerald">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Money label="Avg rent /mo" info="m.marketRent" v={inp.avgRentMo} onChange={(v) => set({ avgRentMo: v })} />
@@ -260,23 +274,23 @@ export function DetailedUWPanel({ deal }: { deal: MarketDeal }) {
           <button onClick={() => set({ financingType: 'new' })} className={`flex-1 rounded-md px-3 py-1.5 ${inp.financingType === 'new' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'}`}>New loan (size to LTV)</button>
           <button onClick={() => set({ financingType: 'assumption' })} className={`flex-1 rounded-md px-3 py-1.5 ${inp.financingType === 'assumption' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'}`}>Loan assumption (from LOI)</button>
         </div>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="grid grid-cols-3 gap-2 md:grid-cols-6">
           {inp.financingType === 'new' ? (
             <>
               <Pct label="LTV" info="f.ltv" v={inp.ltv} onChange={(v) => set({ ltv: v })} />
-              <Plain label="Senior loan (derived)" value={usd(loan, { compact: true })} />
+              <Plain label="Loan (derived)" value={usd(loan, { compact: true })} />
             </>
           ) : (
             <Money label="Assumed loan $" info="f.assumption" v={inp.loanAmount} step={100_000} onChange={(v) => set({ loanAmount: v })} />
           )}
-          <Pct label="Interest rate" info="f.interestRate" v={inp.interestRate} onChange={(v) => set({ interestRate: v })} />
-          <Num label="IO months" info="f.io" v={inp.ioMonths} step={6} onChange={(v) => set({ ioMonths: v })} />
-          <Num label="Amort months" info="f.amort" v={inp.amortMonths} step={12} onChange={(v) => set({ amortMonths: v })} />
-          <Num label="Loan term (yrs, balloon)" v={inp.loanTermYears} onChange={(v) => set({ loanTermYears: v })} />
+          <Pct label="Rate" info="f.interestRate" v={inp.interestRate} onChange={(v) => set({ interestRate: v })} />
+          <Num label="IO mo" info="f.io" v={inp.ioMonths} step={6} onChange={(v) => set({ ioMonths: v })} />
+          <Num label="Amort mo" info="f.amort" v={inp.amortMonths} step={12} onChange={(v) => set({ amortMonths: v })} />
+          <Num label="Term (yrs)" v={inp.loanTermYears} onChange={(v) => set({ loanTermYears: v })} />
         </div>
 
         <Toggle label="Supplemental loan" info="f.supplemental" on={inp.suppEnabled} onToggle={(v) => set({ suppEnabled: v })}>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
             <Money label="Amount" v={inp.suppAmount} step={50_000} onChange={(v) => set({ suppAmount: v })} />
             <Pct label="Rate" v={inp.suppRate} onChange={(v) => set({ suppRate: v })} />
             <Num label="Fund in year (0=close)" v={inp.suppFundYear} onChange={(v) => set({ suppFundYear: v })} />
@@ -285,7 +299,7 @@ export function DetailedUWPanel({ deal }: { deal: MarketDeal }) {
         </Toggle>
 
         <Toggle label="Seller financing" info="f.sellerFinancing" on={inp.sellerEnabled} onToggle={(v) => set({ sellerEnabled: v })}>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
             <Money label="Note amount" v={inp.sellerAmount} step={50_000} onChange={(v) => set({ sellerAmount: v })} />
             <Pct label="Rate" v={inp.sellerRate} onChange={(v) => set({ sellerRate: v })} />
             <Num label="Amort months" v={inp.sellerAmortMonths} step={12} onChange={(v) => set({ sellerAmortMonths: v })} />
@@ -294,7 +308,7 @@ export function DetailedUWPanel({ deal }: { deal: MarketDeal }) {
         </Toggle>
 
         <Toggle label="Refinance during hold" info="f.refi" on={inp.refiEnabled} onToggle={(v) => set({ refiEnabled: v })}>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="grid grid-cols-3 gap-2 md:grid-cols-6">
             <Num label="Refi in year" v={inp.refiYear} onChange={(v) => set({ refiYear: v })} />
             <Pct label="Refi LTV" v={inp.refiLtv} onChange={(v) => set({ refiLtv: v })} />
             <Pct label="Refi cap (value)" v={inp.refiCapRate} onChange={(v) => set({ refiCapRate: v })} />
@@ -307,7 +321,7 @@ export function DetailedUWPanel({ deal }: { deal: MarketDeal }) {
       </Section>
 
       {/* Equity | Exit — side by side on wide screens */}
-      <div className="grid grid-cols-1 border-b border-slate-200 xl:grid-cols-2 xl:divide-x xl:divide-slate-200">
+      <div className="grid grid-cols-1 border-b border-slate-200 lg:grid-cols-2 lg:divide-x lg:divide-slate-200">
       <Section id="uw-equity" title="Equity stack & waterfall" info="r.waterfall" color="violet">
         <Toggle label="Use preferred equity" info="f.prefEquity" on={inp.prefEquityEnabled} onToggle={(v) => set({ prefEquityEnabled: v })}>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -345,90 +359,76 @@ export function DetailedUWPanel({ deal }: { deal: MarketDeal }) {
       </Section>
       </div>
 
-      {/* Proforma — debt service split by lien */}
-      <section id="uw-proforma" className="scroll-mt-28 border-b border-slate-200">
-        <div className={`flex items-center gap-1.5 px-4 py-2 ${SECTION_COLOR.slate.header}`}><h3 className="text-base font-bold text-white">Proforma cash flow</h3></div>
+      {/* THE STATEMENT — one integrated proforma, Synthesis-style: income lines → NOI → debt →
+          cash flow → capital events → distributions. Every other area reads off this. */}
+      <section id="uw-statement" className="scroll-mt-28 border-b border-slate-200">
+        <div className={`flex flex-wrap items-center gap-2 px-4 py-2 ${SECTION_COLOR.slate.header}`}>
+          <h3 className="text-base font-bold text-white">Proforma statement — every line, every year</h3>
+          {anyOverrides && (
+            <button onClick={() => set({ lineOverrides: {}, growthOverrides: {} })} className="ml-auto rounded bg-white/20 px-2 py-0.5 text-[10px] font-semibold text-white hover:bg-white/30">
+              clear cell overrides
+            </button>
+          )}
+        </div>
         <div className="p-4">
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[560px] text-xs">
-            <thead><tr className="text-slate-500">
-              <th className="py-1 text-left font-medium">Year</th>
-              {r.years.map((y) => (<th key={y.year} className="py-1 text-right font-medium">Y{y.year}</th>))}
-            </tr></thead>
-            <tbody className="tabular-nums">
-              <Row label="EGI" cells={r.years.map((y) => usd(y.egi, { compact: true }))} />
-              <Row label="Opex" cells={r.years.map((y) => usd(y.opex, { compact: true }))} />
-              <Row label="NOI" cells={r.years.map((y) => usd(y.noi, { compact: true }))} bold />
-              <Row label="DS · 1st lien" cells={r.years.map((y) => usd(y.dsSenior, { compact: true }))} muted />
-              {showSupp && <Row label="DS · supplemental" cells={r.years.map((y) => usd(y.dsSupp, { compact: true }))} muted />}
-              {showSeller && <Row label="DS · seller note" cells={r.years.map((y) => usd(y.dsSeller, { compact: true }))} muted />}
-              {showRefi && <Row label="DS · refi loan" cells={r.years.map((y) => usd(y.dsRefi, { compact: true }))} muted />}
-              <Row label="Total debt service" cells={r.years.map((y) => usd(y.debtService, { compact: true }))} />
-              <Row label="Cash flow" cells={r.years.map((y) => usd(y.cashFlow, { compact: true }))} bold />
-              <Row label="Refi/supp proceeds" cells={r.years.map((y) => (y.financingProceeds ? usd(y.financingProceeds, { compact: true }) : '—'))} muted />
-              <Row label="DSCR" cells={r.years.map((y) => y.dscr.toFixed(2))} muted />
-            </tbody>
-          </table>
-        </div>
-        </div>
-      </section>
-
-      {/* Per-year editable line detail */}
-      <section id="uw-yeardetail" className="scroll-mt-28 border-b border-slate-200">
-        <button onClick={() => setShowYearDetail((v) => !v)} className={`flex w-full items-center gap-2 px-4 py-2 text-left ${SECTION_COLOR.teal.header}`}>
-          <span className="text-white">{showYearDetail ? '▾' : '▸'}</span>
-          <h3 className="text-base font-bold text-white">Year-by-year detail — every line, every year (editable)</h3>
-          {anyOverrides && <span className="rounded bg-amber-300 px-1.5 py-0.5 text-[10px] font-bold text-amber-900">has overrides</span>}
-        </button>
-        {showYearDetail && (
-          <div className="p-4">
-            <p className="mb-2 text-[11px] text-slate-500">
-              Each cell shows the <b className="text-teal-700">assumption on top</b> (the growth % applied that year — edit it to change <i>just that year&apos;s step</i>, it compounds forward) and the <b>$ value below</b> (type to override that year directly; later years grow from it). Overridden cells are highlighted; ✕ reverts.
-            </p>
-            {anyOverrides && <button onClick={() => set({ lineOverrides: {}, growthOverrides: {} })} className="mb-2 text-xs text-red-500 underline hover:text-red-700">Clear all year overrides</button>}
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[640px] text-xs">
-                <thead><tr className="text-slate-500">
+          <p className="mb-2 text-[11px] text-slate-500">
+            <b className="text-indigo-600">T-12</b> = actuals reference (hand-enter now; auto-filled with a mapping review once AI parsing reads your uploads).
+            In each year cell the small % on top is the growth applied that year — edit it to override <i>just that year&apos;s step</i> (teal).
+            Edit the $ below to set that year directly (amber) — the % then shows the <i>implied</i> growth, so what you see is always accurate.
+          </p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs" style={{ minWidth: 220 + 90 + r.hold * 88 }}>
+              <thead>
+                <tr className="text-slate-500">
                   <th className="py-1 text-left font-medium">Line</th>
+                  <th className="py-1 pr-2 text-right font-medium text-indigo-600">T-12 ref</th>
                   {r.years.map((y) => (<th key={y.year} className="py-1 text-right font-medium">Y{y.year}</th>))}
-                </tr></thead>
-                <tbody className="tabular-nums">
-                  <tr><td colSpan={r.years.length + 1} className="pt-2 text-[10px] font-bold uppercase tracking-wide text-emerald-600">Income (growth {(inp.otherIncomeGrowthPct * 100).toFixed(1)}%/yr)</td></tr>
-                  {inp.otherIncome.map((it) => (
-                    <YearRow key={it.id} label={it.label} values={r.incomeDetail[it.id] ?? []} lineId={it.id} globalGrowth={inp.otherIncomeGrowthPct}
-                      isOverridden={isOverridden} onSet={setYearOverride} onClear={clearYearOverride}
-                      growthOf={growthOf} isGrowthOverridden={isGrowthOverridden} onSetGrowth={setGrowthOverride} onClearGrowth={clearGrowthOverride} />
-                  ))}
-                  <tr><td colSpan={r.years.length + 1} className="pt-2 text-[10px] font-bold uppercase tracking-wide text-amber-600">Expenses (growth {(inp.expenseGrowthPct * 100).toFixed(1)}%/yr)</td></tr>
-                  {inp.expenses.map((it) => (
-                    <YearRow key={it.id} label={it.label} values={r.expenseDetail[it.id] ?? []} lineId={it.id} globalGrowth={inp.expenseGrowthPct}
-                      isOverridden={isOverridden} onSet={setYearOverride} onClear={clearYearOverride}
-                      growthOf={growthOf} isGrowthOverridden={isGrowthOverridden} onSetGrowth={setGrowthOverride} onClearGrowth={clearGrowthOverride} />
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-      </section>
+                </tr>
+              </thead>
+              <tbody className="tabular-nums">
+                <BandRow label={`Income · growth ${(inp.otherIncomeGrowthPct * 100).toFixed(1)}%/yr`} color="bg-emerald-50 text-emerald-700" cols={r.hold + 2} />
+                <StmtRow label="Gross potential rent" cells={r.years.map((y) => usd(y.gpr, { compact: true }))} />
+                {inp.otherIncome.map((it) => (
+                  <StmtLineRow key={it.id} label={it.label} values={r.incomeDetail[it.id] ?? []} lineId={it.id}
+                    t12={inp.t12Ref?.[it.id]} onSetT12={setT12}
+                    isOverridden={isOverridden} onSet={setYearOverride} onClear={clearYearOverride}
+                    isGrowthOverridden={isGrowthOverridden} onSetGrowth={setGrowthOverride} onClearGrowth={clearGrowthOverride} />
+                ))}
+                <StmtRow label={`Vacancy loss (${(inp.vacancy * 100).toFixed(1)}%)`} muted cells={r.years.map((y) => `(${usd((y.gpr + y.otherIncome) * inp.vacancy, { compact: true })})`)} />
+                <StmtRow label="Effective gross income" bold cells={r.years.map((y) => usd(y.egi, { compact: true }))} />
 
-      {/* Waterfall */}
-      <div id="uw-waterfall" className="scroll-mt-28 border-b border-slate-100 p-4">
-        <h3 className="mb-2 flex items-center gap-1.5 text-base font-bold">Distributions to investors <InfoTip k="r.waterfall" /></h3>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[420px] text-xs">
-            <thead><tr className="text-slate-500">
-              <th className="py-1 text-left font-medium">Year</th>
-              {r.waterfall.map((w) => (<th key={w.year} className="py-1 text-right font-medium">Y{w.year}</th>))}
-            </tr></thead>
-            <tbody className="tabular-nums">
-              {inp.prefEquityEnabled && <Row label="Pref (current + carry)" cells={r.waterfall.map((w) => usd(w.pref, { compact: true }))} />}
-              <Row label="LP" cells={r.waterfall.map((w) => usd(w.lp, { compact: true }))} bold />
-              <Row label="GP" cells={r.waterfall.map((w) => usd(w.gp, { compact: true }))} />
-            </tbody>
-          </table>
+                <BandRow label={`Operating expenses · growth ${(inp.expenseGrowthPct * 100).toFixed(1)}%/yr`} color="bg-amber-50 text-amber-700" cols={r.hold + 2} />
+                {inp.expenses.map((it) => (
+                  <StmtLineRow key={it.id} label={it.label} values={r.expenseDetail[it.id] ?? []} lineId={it.id}
+                    t12={inp.t12Ref?.[it.id]} onSetT12={setT12}
+                    isOverridden={isOverridden} onSet={setYearOverride} onClear={clearYearOverride}
+                    isGrowthOverridden={isGrowthOverridden} onSetGrowth={setGrowthOverride} onClearGrowth={clearGrowthOverride} />
+                ))}
+                <StmtRow label="Total operating expenses" bold cells={r.years.map((y) => usd(y.opex, { compact: true }))} />
+                <StmtRow label="NET OPERATING INCOME" strong cells={r.years.map((y) => usd(y.noi, { compact: true }))} />
+
+                <BandRow label="Debt service" color="bg-sky-50 text-sky-700" cols={r.hold + 2} />
+                <StmtRow label="1st lien (senior)" muted cells={r.years.map((y) => usd(y.dsSenior, { compact: true }))} />
+                {showSupp && <StmtRow label="Supplemental" muted cells={r.years.map((y) => usd(y.dsSupp, { compact: true }))} />}
+                {showSeller && <StmtRow label="Seller note" muted cells={r.years.map((y) => usd(y.dsSeller, { compact: true }))} />}
+                {showRefi && <StmtRow label="Refi loan" muted cells={r.years.map((y) => usd(y.dsRefi, { compact: true }))} />}
+                <StmtRow label="Total debt service" bold cells={r.years.map((y) => usd(y.debtService, { compact: true }))} />
+                <StmtRow label="DSCR" muted cells={r.years.map((y) => y.dscr.toFixed(2))} />
+                <StmtRow label="CASH FLOW AFTER DEBT" strong cells={r.years.map((y) => usd(y.cashFlow, { compact: true }))} />
+
+                <BandRow label="Capital events" color="bg-indigo-50 text-indigo-700" cols={r.hold + 2} />
+                <StmtRow label="Refi / supplemental proceeds" muted cells={r.years.map((y) => (y.financingProceeds ? usd(y.financingProceeds, { compact: true }) : '—'))} />
+                <StmtRow label="Net sale proceeds (exit)" muted cells={r.years.map((y) => (y.year === r.hold ? usd(r.netSaleProceeds, { compact: true }) : '—'))} />
+
+                <BandRow label="Distributions" color="bg-violet-50 text-violet-700" cols={r.hold + 2} />
+                {inp.prefEquityEnabled && <StmtRow label="Preferred (current + carry)" cells={r.waterfall.map((w) => usd(w.pref, { compact: true }))} />}
+                <StmtRow label="LP distributions" bold cells={r.waterfall.map((w) => usd(w.lp, { compact: true }))} />
+                <StmtRow label="GP distributions" cells={r.waterfall.map((w) => usd(w.gp, { compact: true }))} />
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      </section>
 
       {/* Sample investor return */}
       <div id="uw-investor" className="scroll-mt-28 border-b border-slate-100 p-4">
@@ -537,9 +537,7 @@ const UW_SECTIONS: [string, string, string][] = [
   ['uw-capital', 'Capital', 'indigo'],
   ['uw-equity', 'Equity', 'violet'],
   ['uw-exit', 'Exit', 'rose'],
-  ['uw-proforma', 'Proforma', 'slate'],
-  ['uw-yeardetail', 'Year detail', 'teal'],
-  ['uw-waterfall', 'Waterfall', 'violet'],
+  ['uw-statement', 'Statement', 'slate'],
   ['uw-investor', 'Investor', 'emerald'],
 ];
 
@@ -723,15 +721,36 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
-function YearRow({
+/** Full-width colored band that introduces a block of the statement (Synthesis-style). */
+function BandRow({ label, color, cols }: { label: string; color: string; cols: number }) {
+  return (
+    <tr>
+      <td colSpan={cols + 1} className={`px-2 pb-1 pt-2 text-[10px] font-bold uppercase tracking-wide ${color}`}>{label}</td>
+    </tr>
+  );
+}
+
+/** Computed statement row: label · T-12 ref (display) · year cells. */
+function StmtRow({ label, cells, t12, bold, muted, strong }: { label: string; cells: string[]; t12?: string; bold?: boolean; muted?: boolean; strong?: boolean }) {
+  return (
+    <tr className={`border-t border-slate-100 ${muted ? 'text-slate-500' : ''} ${strong ? 'bg-emerald-50' : ''}`}>
+      <td className={`py-1 pr-2 text-left ${bold || strong ? 'font-bold' : ''}`}>{label}</td>
+      <td className="py-1 pr-2 text-right text-indigo-400">{t12 ?? '—'}</td>
+      {cells.map((c, i) => (<td key={i} className={`py-1 pl-1 text-right ${bold || strong ? 'font-bold' : ''}`}>{c}</td>))}
+    </tr>
+  );
+}
+
+/** Editable line row: label · editable T-12 ref · year cells (implied-% on top, $ below). */
+function StmtLineRow({
   label,
   values,
   lineId,
-  globalGrowth,
+  t12,
+  onSetT12,
   isOverridden,
   onSet,
   onClear,
-  growthOf,
   isGrowthOverridden,
   onSetGrowth,
   onClearGrowth,
@@ -739,11 +758,11 @@ function YearRow({
   label: string;
   values: number[];
   lineId: string;
-  globalGrowth: number;
+  t12?: number;
+  onSetT12: (lineId: string, v: number | undefined) => void;
   isOverridden: (lineId: string, year: number) => boolean;
   onSet: (lineId: string, year: number, value: number) => void;
   onClear: (lineId: string, year: number) => void;
-  growthOf: (lineId: string, year: number, globalGrowth: number) => number;
   isGrowthOverridden: (lineId: string, year: number) => boolean;
   onSetGrowth: (lineId: string, year: number, rate: number) => void;
   onClearGrowth: (lineId: string, year: number) => void;
@@ -751,32 +770,45 @@ function YearRow({
   return (
     <tr className="border-t border-slate-100 align-bottom">
       <td className="py-1.5 pr-2 text-left text-slate-700">{label}</td>
+      {/* T-12 actuals reference — the anchor the proforma is judged against */}
+      <td className="py-1.5 pr-2 text-right">
+        <input
+          type="number"
+          value={t12 ?? ''}
+          placeholder="—"
+          onChange={(e) => onSetT12(lineId, e.target.value === '' ? undefined : Number(e.target.value))}
+          title="T-12 / T-6 / T-3 actual (annualized). Auto-fills when AI parsing reads your uploads."
+          className="w-20 rounded border border-indigo-200 bg-indigo-50/50 py-0.5 pl-1 pr-1 text-right text-xs tabular-nums text-indigo-700 placeholder:text-indigo-300 focus:border-indigo-400 focus:outline-none"
+        />
+      </td>
       {values.map((v, idx) => {
         const year = idx + 1;
         const cashOver = isOverridden(lineId, year);
         const gOver = isGrowthOverridden(lineId, year);
-        const g = growthOf(lineId, year, globalGrowth);
+        // displayed % = IMPLIED growth from the prior year — accurate no matter which side was edited
+        const prev = idx > 0 ? values[idx - 1] : 0;
+        const implied = idx > 0 && prev !== 0 ? v / prev - 1 : 0;
         return (
           <td key={year} className="py-1.5 pl-1 text-right">
             <div className="inline-flex flex-col items-end gap-0.5">
-              {/* assumption on top: growth % applied for this year's step (Y1 = the base) */}
               {year === 1 ? (
                 <span className="pr-1 text-[9px] uppercase tracking-wide text-slate-400">base</span>
               ) : (
                 <span className="inline-flex items-center">
                   <input
                     type="number"
-                    value={+(g * 100).toFixed(2)}
+                    value={+(implied * 100).toFixed(2)}
                     step={0.25}
                     onChange={(e) => onSetGrowth(lineId, year, Number(e.target.value) / 100)}
-                    title={gOver ? 'Growth override for this year (compounds forward)' : `Assumption: global growth ${(globalGrowth * 100).toFixed(1)}% — edit to override just this year`}
-                    className={`w-14 rounded border py-0 pl-1 pr-0.5 text-right text-[10px] tabular-nums focus:outline-none ${gOver ? 'border-teal-400 bg-teal-50 font-bold text-teal-800' : 'border-transparent bg-transparent text-slate-400 hover:border-slate-200'}`}
+                    title={gOver ? 'Growth override for this year (compounds forward)' : cashOver ? 'Implied growth (derived from the $ you set)' : 'Growth applied this year — edit to override just this step'}
+                    className={`w-14 rounded border py-0 pl-1 pr-0.5 text-right text-[10px] tabular-nums focus:outline-none ${
+                      gOver ? 'border-teal-400 bg-teal-50 font-bold text-teal-800' : cashOver ? 'border-amber-200 bg-amber-50/50 font-semibold italic text-amber-700' : 'border-transparent bg-transparent text-slate-400 hover:border-slate-200'
+                    }`}
                   />
-                  <span className={`text-[9px] ${gOver ? 'text-teal-700' : 'text-slate-400'}`}>%</span>
+                  <span className={`text-[9px] ${gOver ? 'text-teal-700' : cashOver ? 'text-amber-600' : 'text-slate-400'}`}>%</span>
                   {gOver && <button onClick={() => onClearGrowth(lineId, year)} className="ml-0.5 text-[9px] text-teal-500 hover:text-red-500" title="Revert to global growth">✕</button>}
                 </span>
               )}
-              {/* $ value below: type to override this year directly */}
               <span className="inline-flex items-center">
                 <input
                   type="number"
@@ -790,15 +822,6 @@ function YearRow({
           </td>
         );
       })}
-    </tr>
-  );
-}
-
-function Row({ label, cells, bold, muted }: { label: string; cells: string[]; bold?: boolean; muted?: boolean }) {
-  return (
-    <tr className={`border-t border-slate-50 ${muted ? 'text-slate-500' : ''}`}>
-      <td className={`py-1 text-left ${bold ? 'font-semibold' : ''}`}>{label}</td>
-      {cells.map((c, i) => (<td key={i} className={`py-1 text-right ${bold ? 'font-semibold' : ''}`}>{c}</td>))}
     </tr>
   );
 }
