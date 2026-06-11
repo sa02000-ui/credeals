@@ -16,6 +16,7 @@ import { useDealLocal } from '@/lib/hooks/useDealLocal';
 import { InfoTip } from '@/components/InfoTip';
 import { C2CDeck } from '@/components/C2CDeck';
 import { ScenarioRunner } from '@/components/ScenarioRunner';
+import { EncounterModal, EncounterChip } from '@/components/EncounterModal';
 import { fetchActiveScenarios, type AuthoredScenario } from '@/lib/data/scenarios';
 import { usd, type MarketDeal, type ScenarioEffects } from '@/lib/sim';
 
@@ -479,6 +480,7 @@ function OperatingEvents({ deal }: { deal: MarketDeal }) {
   const { applyGameOutcome, setStatus, advanceDays } = useApp();
   const [events, setEvents] = useState<AuthoredScenario[]>([]);
   const [cursor, setCursor] = useDealLocal<number>('am-events', deal.id, 0);
+  const [popupOpen, setPopupOpen] = useState(true);
 
   useEffect(() => {
     let on = true;
@@ -503,12 +505,19 @@ function OperatingEvents({ deal }: { deal: MarketDeal }) {
   }
 
   return (
-    <div className="mb-4 rounded-xl border-2 border-amber-300 bg-amber-50/40 p-3">
-      <div className="mb-2 flex items-center gap-2">
-        <h3 className="text-sm font-bold text-slate-800">📨 Operating event</h3>
-        <span className="ml-auto text-xs text-slate-500">{cursor + 1} of {events.length}</span>
-      </div>
-      <ScenarioRunner key={current.id} scenario={current} onEffects={onEffects} onComplete={onComplete} />
+    <div className="mb-4">
+      {popupOpen ? (
+        <EncounterModal
+          icon="📨"
+          title={current.title}
+          subtitle={`Operating event ${cursor + 1} of ${events.length} — ${deal.name}`}
+          onMinimize={() => setPopupOpen(false)}
+        >
+          <ScenarioRunner key={current.id} scenario={current} onEffects={onEffects} onComplete={onComplete} />
+        </EncounterModal>
+      ) : (
+        <EncounterChip icon="📨" label={`Operating event waiting: ${current.title}`} onOpen={() => setPopupOpen(true)} />
+      )}
     </div>
   );
 }

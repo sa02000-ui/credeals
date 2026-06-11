@@ -47,7 +47,7 @@ export default function ScenarioBuilderPage() {
   const load = useCallback(async () => {
     if (isSupabaseConfigured()) {
       try {
-        const { data, error } = await dataClient().from('scenarios').select('*').order('updated_at', { ascending: false });
+        const { data, error } = await dataClient().from('scenarios').select('*').neq('id', '__settings__').order('updated_at', { ascending: false });
         if (!error && data) {
           setRecords(data as unknown as ScenarioRecord[]);
           setCloud(true);

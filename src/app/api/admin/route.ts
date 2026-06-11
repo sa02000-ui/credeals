@@ -79,7 +79,17 @@ export async function POST(request: Request) {
         const { key, value } = body as { key?: string; value?: unknown };
         if (!key) return bad('key required');
         const { error } = await sb.from('app_settings').upsert({ key, value, updated_at: new Date().toISOString() } as never);
-        if (error) throw error;
+        if (error) {
+          // app_settings table not created yet (migration 0003) — fall back to a hidden row in
+          // the scenarios table so the toggle works regardless. Reads check both (see /api/settings).
+          const { data: row } = await sb.from('scenarios').select('steps').eq('id', '__settings__').maybeSingle();
+          const current = ((row as { steps?: Record<string, unknown> } | null)?.steps) ?? {};
+          const { error: e2 } = await sb.from('scenarios').upsert({
+            id: '__settings__', title: '__settings__ (internal — do not edit)', phase: 'other', severity: 0,
+            status: 'off', entry: '-', steps: { ...current, [key]: value }, notes: 'App settings fallback store.',
+          } as never);
+          if (e2) throw e2;
+        }
         return NextResponse.json({ ok: true });
       }
       case 'deactivate': {

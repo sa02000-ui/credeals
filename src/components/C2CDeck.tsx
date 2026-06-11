@@ -5,6 +5,7 @@ import { useApp } from '@/lib/store';
 import { useDealLocal } from '@/lib/hooks/useDealLocal';
 import { fetchActiveScenarios, type AuthoredScenario } from '@/lib/data/scenarios';
 import { ScenarioRunner } from '@/components/ScenarioRunner';
+import { EncounterModal, EncounterChip } from '@/components/EncounterModal';
 import { ClosingScorecardModal } from '@/components/ClosingScorecardModal';
 import {
   buildC2CScenarios,
@@ -28,6 +29,8 @@ export function C2CDeck({ deal }: { deal: MarketDeal }) {
   const [state, setState] = useDealLocal<DeckState>('c2cdeck-v2', deal.id, { idx: 0, flags: {}, days: 5 });
   const [scenarios] = useDealLocal<Scenario[]>('uw-scenarios-v2', deal.id, [{ inputs: defaultDetailedInputs(deal) }]);
   const [scorecard, setScorecard] = useState<ClosingResult | null>(null);
+  // encounters pop up like the game-start modal; minimize leaves a "decide" chip inline
+  const [popupOpen, setPopupOpen] = useState(true);
 
   // Storylet pool: built-in scenarios + admin-authored ACTIVE ones from the Scenario Builder.
   // An authored scenario with the same id REPLACES the built-in (admin tuning wins).
@@ -99,7 +102,18 @@ export function C2CDeck({ deal }: { deal: MarketDeal }) {
       </div>
 
       {current ? (
-        <ScenarioRunner key={current.id} scenario={current} onEffects={onEffects} onComplete={onComplete} />
+        popupOpen ? (
+          <EncounterModal
+            icon="🃏"
+            title={current.title}
+            subtitle={`Closing decision ${Math.min(state.idx + 1, deck.length)} of ${deck.length} — ${deal.name}`}
+            onMinimize={() => setPopupOpen(false)}
+          >
+            <ScenarioRunner key={current.id} scenario={current} onEffects={onEffects} onComplete={onComplete} />
+          </EncounterModal>
+        ) : (
+          <EncounterChip icon="🃏" label={`Decision waiting: ${current.title}`} onOpen={() => setPopupOpen(true)} />
+        )
       ) : allDone ? (
         <div className="rounded-xl border border-slate-200 bg-white p-4 text-center">
           <p className="text-sm text-slate-700">All decisions made — time to close.</p>
