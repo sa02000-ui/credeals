@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { TopBar } from '@/components/TopBar';
 import { BuyBoxPanel } from '@/components/BuyBoxPanel';
 import { DealFeed } from '@/components/DealFeed';
@@ -25,6 +25,14 @@ export default function Home() {
   const selected = deals.find((d) => d.id === selectedId) ?? null;
   const convoDeal = deals.find((d) => d.id === convoId) ?? null;
   const gameNotStarted = mode === 'game' && difficulty === null;
+
+  // Detailed UW needs every pixel: auto-hide the sidebar (buy box + feed) on that tab.
+  const [wsPhase, setWsPhase] = useState('napkin');
+  const [sidebarPinned, setSidebarPinned] = useState(false);
+  const hideSidebar = !!selected && wsPhase === 'detailed' && !sidebarPinned;
+  useEffect(() => {
+    if (wsPhase !== 'detailed') setSidebarPinned(false); // re-auto-hide next time
+  }, [wsPhase]);
 
   function selectDeal(id: string) {
     setSelectedDeal(id);
@@ -55,32 +63,44 @@ export default function Home() {
         </div>
       )}
 
-      <main className="mx-auto grid w-full max-w-7xl flex-1 gap-4 px-4 py-4 lg:grid-cols-[340px_minmax(0,1fr)]">
-        <div className="space-y-4">
-          <div id="nav-buybox" className="scroll-mt-32">
-            <BuyBoxPanel />
+      <main className={`mx-auto grid w-full max-w-7xl flex-1 gap-4 px-4 py-4 ${hideSidebar ? '' : 'lg:grid-cols-[340px_minmax(0,1fr)]'}`}>
+        {!hideSidebar && (
+          <div className="space-y-4">
+            <div id="nav-buybox" className="scroll-mt-32">
+              <BuyBoxPanel />
+            </div>
+            <div id="nav-feed" className="relative scroll-mt-32">
+              <DealFeed
+                selectedId={selectedId}
+                onSelect={selectDeal}
+                onAddDeal={() => setShowAdd(true)}
+                onOpenConversation={(id) => setConvoId(id)}
+              />
+              {!buyBoxApproved && <Lock>Approve your buy box to start sourcing.</Lock>}
+            </div>
           </div>
-          <div id="nav-feed" className="relative scroll-mt-32">
-            <DealFeed
-              selectedId={selectedId}
-              onSelect={selectDeal}
-              onAddDeal={() => setShowAdd(true)}
-              onOpenConversation={(id) => setConvoId(id)}
-            />
-            {!buyBoxApproved && <Lock>Approve your buy box to start sourcing.</Lock>}
-          </div>
-        </div>
+        )}
 
         <div id="nav-napkin" className="scroll-mt-32">
           {!buyBoxApproved ? (
             <Empty>Step 1 — define and approve your buy box on the left.</Empty>
           ) : selected ? (
-            <DealPhases key={selected.id} deal={selected} onOpenConversation={() => setConvoId(selected.id)} />
+            <DealPhases key={selected.id} deal={selected} onOpenConversation={() => setConvoId(selected.id)} onPhaseChange={setWsPhase} />
           ) : (
             <Empty>Step 2 — pick a deal from the feed to underwrite it.</Empty>
           )}
         </div>
       </main>
+
+      {/* Sidebar is auto-hidden on Detailed UW — floating button brings it back */}
+      {hideSidebar && (
+        <button
+          onClick={() => setSidebarPinned(true)}
+          className="fixed bottom-4 left-4 z-40 rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-xl hover:bg-slate-100"
+        >
+          📋 Show buy box &amp; deals
+        </button>
+      )}
 
       <footer className="border-t border-slate-200 bg-white px-4 py-2 text-center text-[11px] text-slate-400">
         Massive Deal Sim · Slice 1 · napkin math ported from Synthesis · seeded demo deals

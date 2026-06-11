@@ -23,7 +23,7 @@ const PHASE_INFO: Record<DealStage, string> = {
   archived: 'step.pick',
 };
 
-export function DealPhases({ deal, onOpenConversation }: { deal: MarketDeal; onOpenConversation: () => void }) {
+export function DealPhases({ deal, onOpenConversation, onPhaseChange }: { deal: MarketDeal; onOpenConversation: () => void; onPhaseChange?: (phase: string) => void }) {
   const { statusOf } = useApp();
   const status = statusOf(deal.id);
   const unlockedThrough = status === 'archived' ? 0 : Math.max(0, stageIndex(status));
@@ -35,6 +35,11 @@ export function DealPhases({ deal, onOpenConversation }: { deal: MarketDeal; onO
     if (status !== prevStatus.current && status !== 'new' && status !== 'archived') setPhase(status);
     prevStatus.current = status;
   }, [status]);
+
+  // Let the page react to the active tab (e.g. hide the sidebar on Detailed UW for working room).
+  useEffect(() => {
+    onPhaseChange?.(phase);
+  }, [phase, onPhaseChange]);
 
   return (
     <div className="space-y-3">

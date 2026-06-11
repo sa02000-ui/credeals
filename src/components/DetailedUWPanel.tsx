@@ -74,7 +74,24 @@ export function DetailedUWPanel({ deal }: { deal: MarketDeal }) {
     set({ lineOverrides: { ...cur, [lineId]: forLine } });
   };
   const isOverridden = (lineId: string, year: number) => inp.lineOverrides?.[lineId]?.[year] != null;
-  const anyOverrides = Object.values(inp.lineOverrides ?? {}).some((m) => Object.keys(m).length > 0);
+
+  // per-cell growth-assumption overrides (the % applied for that year's step)
+  const setGrowthOverride = (lineId: string, year: number, rate: number) => {
+    const cur = inp.growthOverrides ?? {};
+    set({ growthOverrides: { ...cur, [lineId]: { ...(cur[lineId] ?? {}), [year]: rate } } });
+  };
+  const clearGrowthOverride = (lineId: string, year: number) => {
+    const cur = inp.growthOverrides ?? {};
+    const forLine = { ...(cur[lineId] ?? {}) };
+    delete forLine[year];
+    set({ growthOverrides: { ...cur, [lineId]: forLine } });
+  };
+  const isGrowthOverridden = (lineId: string, year: number) => inp.growthOverrides?.[lineId]?.[year] != null;
+  const growthOf = (lineId: string, year: number, globalGrowth: number) => inp.growthOverrides?.[lineId]?.[year] ?? globalGrowth;
+
+  const anyOverrides =
+    Object.values(inp.lineOverrides ?? {}).some((m) => Object.keys(m).length > 0) ||
+    Object.values(inp.growthOverrides ?? {}).some((m) => Object.keys(m).length > 0);
 
   function nextScenarioName(): string {
     const nums = scenarios.map((s) => Number(/Scenario (\d+)/.exec(s.name)?.[1] ?? 0));
@@ -133,6 +150,9 @@ export function DetailedUWPanel({ deal }: { deal: MarketDeal }) {
         {scenarios.length > 1 && <button onClick={deleteScenario} className="text-xs text-red-500 underline hover:text-red-700">delete scenario</button>}
         <button onClick={() => set(defaultDetailedInputs(deal))} className="ml-auto text-xs text-slate-500 underline hover:text-slate-900">Reset assumptions</button>
       </div>
+
+      {/* Sticky section nav — jump anywhere, always know where you are */}
+      <SectionNav />
 
       {/* KPI band */}
       <div className="border-b border-slate-100 bg-slate-50 p-4">
@@ -198,8 +218,9 @@ export function DetailedUWPanel({ deal }: { deal: MarketDeal }) {
         <p className="mt-2 text-[11px] text-slate-500">Upload the T-12 + rent roll on the deal&apos;s Files; AI parsing (next) will auto-populate the line items below.</p>
       </div>
 
-      {/* Income */}
-      <Section title="Income" info="m.noi" color="emerald">
+      {/* Income | Expenses — side by side on wide screens */}
+      <div className="grid grid-cols-1 border-b border-slate-200 xl:grid-cols-2 xl:divide-x xl:divide-slate-200">
+      <Section id="uw-income" title="Income" info="m.noi" color="emerald">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Money label="Avg rent /mo" info="m.marketRent" v={inp.avgRentMo} onChange={(v) => set({ avgRentMo: v })} />
           <Pct label="Vacancy" info="m.vacancy" v={inp.vacancy} onChange={(v) => set({ vacancy: v })} />
@@ -210,13 +231,14 @@ export function DetailedUWPanel({ deal }: { deal: MarketDeal }) {
       </Section>
 
       {/* Expenses */}
-      <Section title="Operating expenses" info="m.expenseRatio" color="amber">
+      <Section id="uw-expenses" title="Operating expenses" info="m.expenseRatio" color="amber">
         <Pct label="Expense growth" v={inp.expenseGrowthPct} onChange={(v) => set({ expenseGrowthPct: v })} />
         <LineItems title="Expense line items" info="m.expensePerUnit" items={inp.expenses} ctx={expCtx} onChange={(id, p) => updateLine('expenses', id, p)} onAdd={() => addLine('expenses')} onRemove={(id) => removeLine('expenses', id)} />
       </Section>
+      </div>
 
       {/* Capital */}
-      <Section title="Capital plan & uses" info="c.capex" color="indigo">
+      <Section id="uw-capital" title="Capital plan & uses" info="c.capex" color="indigo">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Money label="Purchase price" v={inp.purchasePrice} step={100_000} onChange={(v) => set({ purchasePrice: v })} />
           <Pct label="Acq fee" info="c.acqFee" v={inp.acqFeePct} onChange={(v) => set({ acqFeePct: v })} />
@@ -227,7 +249,7 @@ export function DetailedUWPanel({ deal }: { deal: MarketDeal }) {
       </Section>
 
       {/* Financing */}
-      <Section title="Financing — debt stack" info="f.ltv" color="sky">
+      <Section id="uw-financing" title="Financing — debt stack" info="f.ltv" color="sky">
         {loiSaysAssumption && (
           <div className="mb-3 flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
             <span>Your LOI specifies a <b>loan assumption</b> — apply it here?</span>
@@ -284,8 +306,9 @@ export function DetailedUWPanel({ deal }: { deal: MarketDeal }) {
         </Toggle>
       </Section>
 
-      {/* Equity — pref box clearly separate from common box */}
-      <Section title="Equity stack & waterfall" info="r.waterfall" color="violet">
+      {/* Equity | Exit — side by side on wide screens */}
+      <div className="grid grid-cols-1 border-b border-slate-200 xl:grid-cols-2 xl:divide-x xl:divide-slate-200">
+      <Section id="uw-equity" title="Equity stack & waterfall" info="r.waterfall" color="violet">
         <Toggle label="Use preferred equity" info="f.prefEquity" on={inp.prefEquityEnabled} onToggle={(v) => set({ prefEquityEnabled: v })}>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <Pct label="% of equity from pref" v={inp.prefEquityPct} onChange={(v) => set({ prefEquityPct: v })} />
@@ -312,18 +335,20 @@ export function DetailedUWPanel({ deal }: { deal: MarketDeal }) {
       </Section>
 
       {/* Exit */}
-      <Section title="Exit" info="c.hold" color="rose">
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <Section id="uw-exit" title="Exit" info="c.hold" color="rose">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           <Num label="Hold (years, max 12)" info="c.hold" v={inp.holdYears} onChange={(v) => set({ holdYears: v })} />
           <Pct label="Exit cap" info="m.stabilizedCap" v={inp.exitCapRate} onChange={(v) => set({ exitCapRate: v })} />
           <Pct label="Sale cost %" info="c.exitCosts" v={inp.saleCostPct} onChange={(v) => set({ saleCostPct: v })} />
         </div>
         <LineItems title="Other exit costs" info="c.exitCosts" items={inp.exitItems} ctx={incCtx} onChange={(id, p) => updateLine('exitItems', id, p)} onAdd={() => addLine('exitItems')} onRemove={(id) => removeLine('exitItems', id)} />
       </Section>
+      </div>
 
       {/* Proforma — debt service split by lien */}
-      <div className="border-b border-slate-100 p-4">
-        <h3 className="mb-2 text-base font-bold">Proforma cash flow</h3>
+      <section id="uw-proforma" className="scroll-mt-28 border-b border-slate-200">
+        <div className={`flex items-center gap-1.5 px-4 py-2 ${SECTION_COLOR.slate.header}`}><h3 className="text-base font-bold text-white">Proforma cash flow</h3></div>
+        <div className="p-4">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[560px] text-xs">
             <thead><tr className="text-slate-500">
@@ -345,44 +370,50 @@ export function DetailedUWPanel({ deal }: { deal: MarketDeal }) {
             </tbody>
           </table>
         </div>
-      </div>
+        </div>
+      </section>
 
       {/* Per-year editable line detail */}
-      <div className="border-b border-slate-100 p-4">
-        <button onClick={() => setShowYearDetail((v) => !v)} className="flex w-full items-center gap-2 rounded-lg border-2 border-teal-300 bg-teal-50 px-3 py-1.5 text-base font-bold text-teal-800">
-          <span>{showYearDetail ? '▾' : '▸'}</span> Year-by-year line detail (every item, every year — editable)
-          {anyOverrides && <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">has overrides</span>}
+      <section id="uw-yeardetail" className="scroll-mt-28 border-b border-slate-200">
+        <button onClick={() => setShowYearDetail((v) => !v)} className={`flex w-full items-center gap-2 px-4 py-2 text-left ${SECTION_COLOR.teal.header}`}>
+          <span className="text-white">{showYearDetail ? '▾' : '▸'}</span>
+          <h3 className="text-base font-bold text-white">Year-by-year detail — every line, every year (editable)</h3>
+          {anyOverrides && <span className="rounded bg-amber-300 px-1.5 py-0.5 text-[10px] font-bold text-amber-900">has overrides</span>}
         </button>
         {showYearDetail && (
-          <div className="mt-2">
-            <p className="mb-2 text-[11px] text-slate-500">Each income/expense line grows from the Year-1 input. Type a value in any cell to <b>override that specific year</b> (highlighted); click ✕ to revert it to the calculated value.</p>
-            {anyOverrides && <button onClick={() => set({ lineOverrides: {} })} className="mb-2 text-xs text-red-500 underline hover:text-red-700">Clear all year overrides</button>}
+          <div className="p-4">
+            <p className="mb-2 text-[11px] text-slate-500">
+              Each cell shows the <b className="text-teal-700">assumption on top</b> (the growth % applied that year — edit it to change <i>just that year&apos;s step</i>, it compounds forward) and the <b>$ value below</b> (type to override that year directly; later years grow from it). Overridden cells are highlighted; ✕ reverts.
+            </p>
+            {anyOverrides && <button onClick={() => set({ lineOverrides: {}, growthOverrides: {} })} className="mb-2 text-xs text-red-500 underline hover:text-red-700">Clear all year overrides</button>}
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[560px] text-xs">
+              <table className="w-full min-w-[640px] text-xs">
                 <thead><tr className="text-slate-500">
                   <th className="py-1 text-left font-medium">Line</th>
                   {r.years.map((y) => (<th key={y.year} className="py-1 text-right font-medium">Y{y.year}</th>))}
                 </tr></thead>
                 <tbody className="tabular-nums">
-                  <tr><td colSpan={r.years.length + 1} className="pt-2 text-[10px] font-bold uppercase tracking-wide text-emerald-600">Income</td></tr>
+                  <tr><td colSpan={r.years.length + 1} className="pt-2 text-[10px] font-bold uppercase tracking-wide text-emerald-600">Income (growth {(inp.otherIncomeGrowthPct * 100).toFixed(1)}%/yr)</td></tr>
                   {inp.otherIncome.map((it) => (
-                    <YearRow key={it.id} label={it.label} values={r.incomeDetail[it.id] ?? []} lineId={it.id}
-                      isOverridden={isOverridden} onSet={setYearOverride} onClear={clearYearOverride} />
+                    <YearRow key={it.id} label={it.label} values={r.incomeDetail[it.id] ?? []} lineId={it.id} globalGrowth={inp.otherIncomeGrowthPct}
+                      isOverridden={isOverridden} onSet={setYearOverride} onClear={clearYearOverride}
+                      growthOf={growthOf} isGrowthOverridden={isGrowthOverridden} onSetGrowth={setGrowthOverride} onClearGrowth={clearGrowthOverride} />
                   ))}
-                  <tr><td colSpan={r.years.length + 1} className="pt-2 text-[10px] font-bold uppercase tracking-wide text-amber-600">Expenses</td></tr>
+                  <tr><td colSpan={r.years.length + 1} className="pt-2 text-[10px] font-bold uppercase tracking-wide text-amber-600">Expenses (growth {(inp.expenseGrowthPct * 100).toFixed(1)}%/yr)</td></tr>
                   {inp.expenses.map((it) => (
-                    <YearRow key={it.id} label={it.label} values={r.expenseDetail[it.id] ?? []} lineId={it.id}
-                      isOverridden={isOverridden} onSet={setYearOverride} onClear={clearYearOverride} />
+                    <YearRow key={it.id} label={it.label} values={r.expenseDetail[it.id] ?? []} lineId={it.id} globalGrowth={inp.expenseGrowthPct}
+                      isOverridden={isOverridden} onSet={setYearOverride} onClear={clearYearOverride}
+                      growthOf={growthOf} isGrowthOverridden={isGrowthOverridden} onSetGrowth={setGrowthOverride} onClearGrowth={clearGrowthOverride} />
                   ))}
                 </tbody>
               </table>
             </div>
           </div>
         )}
-      </div>
+      </section>
 
       {/* Waterfall */}
-      <div className="border-b border-slate-100 p-4">
+      <div id="uw-waterfall" className="scroll-mt-28 border-b border-slate-100 p-4">
         <h3 className="mb-2 flex items-center gap-1.5 text-base font-bold">Distributions to investors <InfoTip k="r.waterfall" /></h3>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[420px] text-xs">
@@ -400,7 +431,7 @@ export function DetailedUWPanel({ deal }: { deal: MarketDeal }) {
       </div>
 
       {/* Sample investor return */}
-      <div className="border-b border-slate-100 p-4">
+      <div id="uw-investor" className="scroll-mt-28 border-b border-slate-100 p-4">
         <h3 className="mb-2 text-base font-bold">Sample investor return</h3>
         <div className="flex flex-wrap items-end gap-3">
           <Money label="If an LP invests" v={inp.sampleInvestment} step={25_000} onChange={(v) => set({ sampleInvestment: v })} />
@@ -487,24 +518,53 @@ function normalizeInputs(inp: DetailedUWInputs, deal: MarketDeal): DetailedUWInp
   };
 }
 
-const SECTION_COLOR: Record<string, string> = {
-  emerald: 'border-emerald-300 bg-emerald-50 text-emerald-800',
-  amber: 'border-amber-300 bg-amber-50 text-amber-800',
-  indigo: 'border-indigo-300 bg-indigo-50 text-indigo-800',
-  sky: 'border-sky-300 bg-sky-50 text-sky-800',
-  violet: 'border-violet-300 bg-violet-50 text-violet-800',
-  rose: 'border-rose-300 bg-rose-50 text-rose-800',
+// Synthesis-style SOLID section headers — instantly identifiable while scrolling.
+const SECTION_COLOR: Record<string, { header: string; chip: string }> = {
+  emerald: { header: 'bg-emerald-600', chip: 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200' },
+  amber: { header: 'bg-amber-500', chip: 'bg-amber-100 text-amber-800 hover:bg-amber-200' },
+  indigo: { header: 'bg-indigo-600', chip: 'bg-indigo-100 text-indigo-800 hover:bg-indigo-200' },
+  sky: { header: 'bg-sky-600', chip: 'bg-sky-100 text-sky-800 hover:bg-sky-200' },
+  violet: { header: 'bg-violet-600', chip: 'bg-violet-100 text-violet-800 hover:bg-violet-200' },
+  rose: { header: 'bg-rose-600', chip: 'bg-rose-100 text-rose-800 hover:bg-rose-200' },
+  teal: { header: 'bg-teal-600', chip: 'bg-teal-100 text-teal-800 hover:bg-teal-200' },
+  slate: { header: 'bg-slate-700', chip: 'bg-slate-100 text-slate-700 hover:bg-slate-200' },
 };
 
-function Section({ title, info, color, children }: { title: string; info?: string; color: string; children: React.ReactNode }) {
+const UW_SECTIONS: [string, string, string][] = [
+  ['uw-income', 'Income', 'emerald'],
+  ['uw-expenses', 'Expenses', 'amber'],
+  ['uw-financing', 'Financing', 'sky'],
+  ['uw-capital', 'Capital', 'indigo'],
+  ['uw-equity', 'Equity', 'violet'],
+  ['uw-exit', 'Exit', 'rose'],
+  ['uw-proforma', 'Proforma', 'slate'],
+  ['uw-yeardetail', 'Year detail', 'teal'],
+  ['uw-waterfall', 'Waterfall', 'violet'],
+  ['uw-investor', 'Investor', 'emerald'],
+];
+
+function SectionNav() {
+  const go = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   return (
-    <div className="border-b border-slate-100 p-4">
-      <div className={`mb-3 flex items-center gap-1.5 rounded-lg border-2 px-3 py-1.5 ${SECTION_COLOR[color]}`}>
-        <h3 className="text-base font-bold">{title}</h3>
-        {info && <InfoTip k={info} />}
-      </div>
-      {children}
+    <div className="sticky top-14 z-10 flex flex-wrap items-center gap-1 border-b border-slate-200 bg-white/95 px-3 py-1.5 backdrop-blur">
+      {UW_SECTIONS.map(([id, label, color]) => (
+        <button key={id} onClick={() => go(id)} className={`rounded-md px-2 py-0.5 text-xs font-semibold ${SECTION_COLOR[color].chip}`}>
+          {label}
+        </button>
+      ))}
     </div>
+  );
+}
+
+function Section({ id, title, info, color, children }: { id?: string; title: string; info?: string; color: string; children: React.ReactNode }) {
+  return (
+    <section id={id} className="scroll-mt-28">
+      <div className={`flex items-center gap-1.5 px-4 py-2 ${SECTION_COLOR[color].header}`}>
+        <h3 className="text-base font-bold text-white">{title}</h3>
+        {info && <span className="brightness-200"><InfoTip k={info} /></span>}
+      </div>
+      <div className="p-4">{children}</div>
+    </section>
   );
 }
 
@@ -667,33 +727,65 @@ function YearRow({
   label,
   values,
   lineId,
+  globalGrowth,
   isOverridden,
   onSet,
   onClear,
+  growthOf,
+  isGrowthOverridden,
+  onSetGrowth,
+  onClearGrowth,
 }: {
   label: string;
   values: number[];
   lineId: string;
+  globalGrowth: number;
   isOverridden: (lineId: string, year: number) => boolean;
   onSet: (lineId: string, year: number, value: number) => void;
   onClear: (lineId: string, year: number) => void;
+  growthOf: (lineId: string, year: number, globalGrowth: number) => number;
+  isGrowthOverridden: (lineId: string, year: number) => boolean;
+  onSetGrowth: (lineId: string, year: number, rate: number) => void;
+  onClearGrowth: (lineId: string, year: number) => void;
 }) {
   return (
-    <tr className="border-t border-slate-50">
-      <td className="py-1 pr-2 text-left text-slate-700">{label}</td>
+    <tr className="border-t border-slate-100 align-bottom">
+      <td className="py-1.5 pr-2 text-left text-slate-700">{label}</td>
       {values.map((v, idx) => {
         const year = idx + 1;
-        const over = isOverridden(lineId, year);
+        const cashOver = isOverridden(lineId, year);
+        const gOver = isGrowthOverridden(lineId, year);
+        const g = growthOf(lineId, year, globalGrowth);
         return (
-          <td key={year} className="py-1 pl-1 text-right">
-            <div className="relative inline-flex items-center">
-              <input
-                type="number"
-                value={Math.round(v)}
-                onChange={(e) => onSet(lineId, year, Number(e.target.value))}
-                className={`w-20 rounded border py-0.5 pl-1 pr-1 text-right text-xs tabular-nums focus:outline-none ${over ? 'border-amber-400 bg-amber-50 font-semibold text-amber-800' : 'border-slate-200 text-slate-600'}`}
-              />
-              {over && <button onClick={() => onClear(lineId, year)} className="ml-0.5 text-[10px] text-amber-500 hover:text-red-500" title="Revert to calculated">✕</button>}
+          <td key={year} className="py-1.5 pl-1 text-right">
+            <div className="inline-flex flex-col items-end gap-0.5">
+              {/* assumption on top: growth % applied for this year's step (Y1 = the base) */}
+              {year === 1 ? (
+                <span className="pr-1 text-[9px] uppercase tracking-wide text-slate-400">base</span>
+              ) : (
+                <span className="inline-flex items-center">
+                  <input
+                    type="number"
+                    value={+(g * 100).toFixed(2)}
+                    step={0.25}
+                    onChange={(e) => onSetGrowth(lineId, year, Number(e.target.value) / 100)}
+                    title={gOver ? 'Growth override for this year (compounds forward)' : `Assumption: global growth ${(globalGrowth * 100).toFixed(1)}% — edit to override just this year`}
+                    className={`w-14 rounded border py-0 pl-1 pr-0.5 text-right text-[10px] tabular-nums focus:outline-none ${gOver ? 'border-teal-400 bg-teal-50 font-bold text-teal-800' : 'border-transparent bg-transparent text-slate-400 hover:border-slate-200'}`}
+                  />
+                  <span className={`text-[9px] ${gOver ? 'text-teal-700' : 'text-slate-400'}`}>%</span>
+                  {gOver && <button onClick={() => onClearGrowth(lineId, year)} className="ml-0.5 text-[9px] text-teal-500 hover:text-red-500" title="Revert to global growth">✕</button>}
+                </span>
+              )}
+              {/* $ value below: type to override this year directly */}
+              <span className="inline-flex items-center">
+                <input
+                  type="number"
+                  value={Math.round(v)}
+                  onChange={(e) => onSet(lineId, year, Number(e.target.value))}
+                  className={`w-20 rounded border py-0.5 pl-1 pr-1 text-right text-xs tabular-nums focus:outline-none ${cashOver ? 'border-amber-400 bg-amber-50 font-semibold text-amber-800' : 'border-slate-200 text-slate-600'}`}
+                />
+                {cashOver && <button onClick={() => onClear(lineId, year)} className="ml-0.5 text-[10px] text-amber-500 hover:text-red-500" title="Revert to calculated">✕</button>}
+              </span>
             </div>
           </td>
         );

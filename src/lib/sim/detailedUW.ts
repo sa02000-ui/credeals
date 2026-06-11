@@ -140,8 +140,12 @@ export interface DetailedUWInputs {
   // --- Sample investor ---
   sampleInvestment: number;
 
-  // --- Per-line, per-year overrides ($ for a given line id + year; replaces the grown value) ---
+  // --- Per-line, per-year overrides ---
+  /** $ override for a line id + year: sets that year's value directly (later years grow FROM it) */
   lineOverrides?: Record<string, Record<number, number>>;
+  /** growth-rate override (decimal) for a line id + year: replaces the global growth for that one
+   *  year's step (value_y = value_{y-1} × (1 + rate)); compounds forward like Excel */
+  growthOverrides?: Record<string, Record<number, number>>;
 }
 
 export interface UWYear {
@@ -297,11 +301,24 @@ export function runDetailedUW(i: DetailedUWInputs): DetailedUWResult {
   const seniorLoan = i.financingType === 'new' ? Math.round(price * i.ltv) : i.loanAmount;
   const grow = (rate: number, y: number) => Math.pow(1 + rate, y - 1);
 
-  // --- P&L through hold+1 (per-line, honoring per-year overrides) ---
+  // --- P&L through hold+1 (per-line, SEQUENTIAL like Excel: value_y = value_{y-1} × (1+g_y)) ---
+  // $ override sets a year's value directly (later years grow FROM it); growth override replaces
+  // the global growth for that one year's step. Both compound forward, matching Synthesis behavior.
   const ovr = i.lineOverrides ?? {};
-  const lineY = (it: LineItem, ctx: LineCtx, gr: number, y: number): number => {
+  const gOvr = i.growthOverrides ?? {};
+  const prevVal: Record<string, number> = {};
+  const lineY = (it: LineItem, ctx: LineCtx, globalGrowth: number, y: number): number => {
+    let v: number;
+    if (y === 1) {
+      v = lineAmount(it, ctx);
+    } else {
+      const g = gOvr[it.id]?.[y] ?? globalGrowth;
+      v = (prevVal[it.id] ?? lineAmount(it, ctx)) * (1 + g);
+    }
     const o = ovr[it.id]?.[y];
-    return o != null ? o : lineAmount(it, ctx) * Math.pow(1 + gr, y - 1);
+    if (o != null) v = o;
+    prevVal[it.id] = v;
+    return v;
   };
   const incomeDetail: Record<string, number[]> = {};
   const expenseDetail: Record<string, number[]> = {};
