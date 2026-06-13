@@ -102,8 +102,9 @@ export interface AMOption {
   label: string;
   detail?: string;
   tone: 'good' | 'warn' | 'bad';
-  effects: AMEffect;
-  result: string;
+  /** direct effects/result, OR omit and use weighted `branches` for an uncertain outcome */
+  effects?: AMEffect;
+  result?: string;
   lesson?: string;
   next?: string;
   branches?: { weight: number; result: string; effects: AMEffect; next?: string }[];

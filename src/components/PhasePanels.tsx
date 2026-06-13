@@ -10,15 +10,13 @@
  *   custom reminders, auto-reschedule) + quarterly performance logging.
  */
 
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import { useApp } from '@/lib/store';
 import { useDealLocal } from '@/lib/hooks/useDealLocal';
 import { InfoTip } from '@/components/InfoTip';
 import { C2CDeck } from '@/components/C2CDeck';
-import { ScenarioRunner } from '@/components/ScenarioRunner';
-import { EncounterModal, EncounterChip } from '@/components/EncounterModal';
-import { fetchActiveScenarios, type AuthoredScenario } from '@/lib/data/scenarios';
-import { usd, type MarketDeal, type ScenarioEffects } from '@/lib/sim';
+import { AMPhase } from '@/components/AMPhase';
+import { usd, type MarketDeal } from '@/lib/sim';
 
 function PhaseShell({ title, subtitle, info, children }: { title: string; subtitle: string; info?: string; children: React.ReactNode }) {
   return (
@@ -432,7 +430,7 @@ export function AMPanel({ deal }: { deal: MarketDeal }) {
         </div>
       )}
 
-      {mode === 'game' && <OperatingEvents deal={deal} />}
+      {mode === 'game' && <div className="mb-4"><AMPhase deal={deal} /></div>}
 
       <div className="mb-3 flex gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1">
         {([['reminders', 'Reminders & tasks'], ['quarterly', 'Quarterly performance']] as const).map(([id, label]) => (
@@ -472,53 +470,6 @@ export function AMPanel({ deal }: { deal: MarketDeal }) {
 
       {tab === 'quarterly' && <QuarterlyLog state={state} setState={setState} />}
     </PhaseShell>
-  );
-}
-
-/** Game-mode operating surprises during the hold — plays admin-authored 'am' scenarios in order. */
-function OperatingEvents({ deal }: { deal: MarketDeal }) {
-  const { applyGameOutcome, setStatus, advanceDays } = useApp();
-  const [events, setEvents] = useState<AuthoredScenario[]>([]);
-  const [cursor, setCursor] = useDealLocal<number>('am-events', deal.id, 0);
-  const [popupOpen, setPopupOpen] = useState(true);
-
-  useEffect(() => {
-    let on = true;
-    fetchActiveScenarios('am').then((list) => { if (on) setEvents(list); });
-    return () => { on = false; };
-  }, []);
-
-  const current = events[cursor] ?? null;
-  if (!current) return null;
-
-  function onEffects(e: ScenarioEffects) {
-    if (e.cash || e.rep) applyGameOutcome({ dealId: deal.id, cashDelta: e.cash, cashLabel: `${current?.title} — ${deal.name}`, repDelta: e.rep });
-    if (e.days) advanceDays(e.days);
-  }
-  function onComplete(flags: Record<string, boolean>) {
-    if (flags.walk || flags.sell) {
-      applyGameOutcome({ dealId: deal.id, event: { title: `Exited: ${deal.name}`, detail: 'You exited the asset.', lesson: 'Every hold ends with a refi or a sale — the score is actuals vs. the proforma you promised.' } });
-      setStatus(deal.id, 'archived');
-      return;
-    }
-    setCursor((c) => c + 1);
-  }
-
-  return (
-    <div className="mb-4">
-      {popupOpen ? (
-        <EncounterModal
-          icon="📨"
-          title={current.title}
-          subtitle={`Operating event ${cursor + 1} of ${events.length} — ${deal.name}`}
-          onMinimize={() => setPopupOpen(false)}
-        >
-          <ScenarioRunner key={current.id} scenario={current} onEffects={onEffects} onComplete={onComplete} />
-        </EncounterModal>
-      ) : (
-        <EncounterChip icon="📨" label={`Operating event waiting: ${current.title}`} onOpen={() => setPopupOpen(true)} />
-      )}
-    </div>
   );
 }
 

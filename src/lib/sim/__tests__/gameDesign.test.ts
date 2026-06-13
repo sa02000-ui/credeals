@@ -3,7 +3,8 @@ import { scoreUW } from '../uwScore';
 import { seededRng, generateSessionSeed, jitterWeight, CURVEBALL_IDS } from '../sessionSeed';
 import { INITIAL_PLAYER_MODEL, updatePlayerModel, shouldDeliverLesson, recordLesson } from '../playerModel';
 import { newRelationship, recordInteraction, applyBrokerRelToSellerTraits } from '../relationshipLedger';
-import type { DealDNA } from '../gameTypes';
+import { drawAMCards, AM_CARDS } from '../amCards';
+import type { DealDNA, SessionSeed } from '../gameTypes';
 
 describe('scoreUW', () => {
   it('scores conservative assumptions low and aggressive high', () => {
@@ -88,5 +89,27 @@ describe('relationshipLedger', () => {
     expect(rel.unlockedBehaviors).toContain('stopped-sending-deals');
     const traits = applyBrokerRelToSellerTraits({ priceFlex: 0.4, motivation: 0.5 }, rel);
     expect(traits.priceFlex).toBeLessThan(0.4);
+  });
+});
+
+describe('drawAMCards', () => {
+  const seed: SessionSeed = { value: 999, dealPoolIndices: [], curveballDeck: ['hvac-failure', 'rate-hike-shock', 'unsolicited-buyer-offer', 'lp-cold-feet'], curveballQuarters: [1, 3, 5, 7], marketShiftDay: 100, marketShiftTo: 'tough' };
+
+  it('fires the seeded curveball assigned to the quarter first', () => {
+    const cards = drawAMCards({ quarter: 1, seed, firedIds: [], count: 2 });
+    expect(cards.some((c) => c.id === 'hvac-failure')).toBe(true);
+  });
+  it('is deterministic for the same quarter/seed', () => {
+    const a = drawAMCards({ quarter: 2, seed, firedIds: [], count: 2 }).map((c) => c.id);
+    const b = drawAMCards({ quarter: 2, seed, firedIds: [], count: 2 }).map((c) => c.id);
+    expect(a).toEqual(b);
+  });
+  it('never redraws a fired card', () => {
+    const cards = drawAMCards({ quarter: 4, seed, firedIds: AM_CARDS.map((c) => c.id).filter((id) => id !== 'lp-update'), count: 2 });
+    expect(cards.every((c) => c.id === 'lp-update' || c.id === 'unsolicited-buyer-offer' || c.id === 'lp-cold-feet' || c.id === 'rate-hike-shock')).toBe(true);
+  });
+  it('respects requires (value-add only cards hidden otherwise)', () => {
+    const cards = drawAMCards({ quarter: 6, seed, dna: { businessPlan: 'light-touch' }, firedIds: [], count: 8 });
+    expect(cards.some((c) => c.id === 'renovation-decision')).toBe(false);
   });
 });

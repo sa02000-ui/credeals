@@ -23,6 +23,8 @@ import {
   type SessionSeed,
   type PlayerModel,
   type DealDNA,
+  type AMRunState,
+  type AMEffect,
   type CoachMessage,
   type CounterpartyRelationship,
   type InteractionType,
@@ -93,6 +95,7 @@ interface AppState {
   sessionSeed: SessionSeed | null;
   playerModel: PlayerModel;
   dealDNA: Record<string, DealDNA>;
+  amStates: Record<string, AMRunState>;
   relationships: Record<string, CounterpartyRelationship>;
   coachMessages: CoachMessage[];
 }
@@ -123,6 +126,7 @@ const INITIAL: AppState = {
   sessionSeed: null,
   playerModel: INITIAL_PLAYER_MODEL,
   dealDNA: {},
+  amStates: {},
   relationships: {},
   coachMessages: [],
 };
@@ -141,6 +145,9 @@ interface AppContextValue extends AppState {
   updateDealDNA: (dealId: string, patch: Partial<DealDNA>) => void;
   updateRelationship: (personaId: string, type: InteractionType, dealId: string, note: string) => void;
   addCoachMessage: (message: Omit<CoachMessage, 'id' | 'ts'>) => void;
+  initAMState: (dealId: string, occupancy: number, noi: number) => void;
+  applyAMEffect: (dealId: string, effect: AMEffect, quarter: number, cardId: string, optionId: string) => void;
+  advanceAMQuarter: (dealId: string, distribution: number) => void;
   setMode: (m: SimMode) => void;
   setAdmin: (v: boolean) => void;
   setMarket: (m: MarketCondition) => void;
@@ -415,6 +422,44 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           ...s,
           coachMessages: [...s.coachMessages, { ...message, id: `cm-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, ts: Date.now() }].slice(-100),
         })),
+      initAMState: (dealId, occupancy, noi) =>
+        setState((s) =>
+          s.amStates[dealId]
+            ? s
+            : { ...s, amStates: { ...s.amStates, [dealId]: { dealId, quarter: 1, occupancy, noiCurrent: noi, activeFlags: [], decisions: [], cashFlowHistory: [] } } },
+        ),
+      applyAMEffect: (dealId, effect, quarter, cardId, optionId) =>
+        setState((s) => {
+          const am = s.amStates[dealId];
+          if (!am) return s;
+          const treasury = effect.cash
+            ? { ...s.treasury, events: [...s.treasury.events, { id: `am-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`, day: s.day, label: `${cardId} — AM`, amount: effect.cash }] }
+            : s.treasury;
+          const flags = new Set(am.activeFlags);
+          if (effect.setFlag) flags.add(effect.setFlag);
+          if (effect.clearFlag) flags.delete(effect.clearFlag);
+          const next: AMRunState = {
+            ...am,
+            occupancy: Math.max(0, Math.min(1, am.occupancy + (effect.occupancyDelta ?? 0))),
+            noiCurrent: (am.noiCurrent + (effect.noiDelta ?? 0)) * (effect.performanceFactor ?? 1),
+            activeFlags: Array.from(flags),
+            decisions: [...am.decisions, { quarter, cardId, optionId, effects: effect, day: s.day }],
+          };
+          return {
+            ...s,
+            treasury,
+            day: s.day + (effect.days ?? 0),
+            game: effect.rep ? { ...s.game, reputation: applyRep(s.game.reputation, effect.rep) } : s.game,
+            amStates: { ...s.amStates, [dealId]: next },
+          };
+        }),
+      advanceAMQuarter: (dealId, distribution) =>
+        setState((s) => {
+          const am = s.amStates[dealId];
+          if (!am) return s;
+          const next: AMRunState = { ...am, quarter: am.quarter + 1, cashFlowHistory: [...am.cashFlowHistory, { quarter: am.quarter, amount: distribution }] };
+          return { ...s, day: s.day + 90, amStates: { ...s.amStates, [dealId]: next } };
+        }),
       applyGameOutcome: (o) =>
         setState((s) => {
           const treasuryEvents = [...s.treasury.events];
