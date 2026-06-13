@@ -210,6 +210,10 @@ export default function Landing() {
         <p className="mt-2 text-[10px] text-indigo-300/80">
           This product uses the Census Bureau Data API but is not endorsed or certified by the Census Bureau.
         </p>
+        <p className="mt-2 text-[10px] leading-relaxed text-indigo-300/80">
+          ⚠️ Estimates and simulated figures are illustrative only and may be approximate — verify all information
+          independently. Nothing here is investment, legal, or tax advice.
+        </p>
       </main>
     </div>
   );

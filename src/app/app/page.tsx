@@ -11,6 +11,7 @@ import { CareerHud } from '@/components/CareerHud';
 import { OnboardingFlow } from '@/components/OnboardingFlow';
 import { CoachPanel } from '@/components/CoachPanel';
 import { ObjectiveHud } from '@/components/ObjectiveHud';
+import { SimDisclaimer } from '@/components/SimDisclaimer';
 import { useApp } from '@/lib/store';
 import { stageDef } from '@/lib/sim';
 
@@ -108,7 +109,11 @@ export default function Home() {
 
 
       <footer className="border-t border-slate-200 bg-white px-4 py-2 text-center text-[11px] text-slate-400">
-        Massive Deal Sim · Slice 1 · napkin math ported from Synthesis · seeded demo deals
+        {mode === 'game' ? (
+          <SimDisclaimer variant="line" className="mx-auto max-w-3xl text-center" />
+        ) : (
+          'Massive Deal Sim · Slice 1 · napkin math ported from Synthesis · seeded demo deals'
+        )}
       </footer>
 
       {showAdd && <AddDealModal onClose={() => setShowAdd(false)} onAdded={(id) => selectDeal(id)} />}

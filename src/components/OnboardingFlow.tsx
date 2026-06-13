@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useApp } from '@/lib/store';
+import { SimDisclaimer } from '@/components/SimDisclaimer';
 import { PROFILE_CONFIGS, getCoachIntro, getCoachMessage, usd, type ExperienceProfile } from '@/lib/sim';
 
 const SPEEDS = [2, 5, 10];
@@ -72,6 +73,7 @@ export function OnboardingFlow() {
               <div className="mt-4 text-center">
                 <button onClick={() => setMode('real')} className="text-xs text-slate-400 underline hover:text-slate-700">or switch to Real mode (work an actual deal — no game layer)</button>
               </div>
+              <SimDisclaimer variant="box" className="mt-4" />
             </>
           )}
 
