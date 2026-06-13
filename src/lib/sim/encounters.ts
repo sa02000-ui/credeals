@@ -1,11 +1,11 @@
 /**
  * Encounter content for the game's signature moments (DESIGN §22):
  *  - E2: a PSA "catch the trap" clause library + a builder that deals a hand of clauses.
- *  - E3: a Contract-to-Close decision deck (event cards with consequential options).
+ * (The Contract-to-Close deck lives in scenarios.ts as branching scenarios — buildC2CScenarios.)
  * Pure data/logic; the modals/components render and resolve these.
  */
 
-import type { Difficulty, MarketCondition, Reputation } from './gameEngine';
+import type { Difficulty } from './gameEngine';
 
 // ---------------------------------------------------------------------------
 //  E2 — PSA "catch the trap"
@@ -56,91 +56,5 @@ export function buildPSA(difficulty: Difficulty): PSAClause[] {
   return shuffle([...sneaky.slice(0, nSneaky), ...benign.slice(0, nBenign)]);
 }
 
-// ---------------------------------------------------------------------------
-//  E3 — Contract-to-Close decision deck
-// ---------------------------------------------------------------------------
-
-export interface DeckEffect {
-  cash?: number; // signed $ (usually negative cost)
-  rep?: Partial<Reputation>;
-  days?: number; // time consumed
-  closing?: Partial<{ contingenciesCleared: boolean; raiseFunded: boolean; ddDone: boolean }>;
-  ends?: 'walk'; // walking the deal
-}
-export interface DeckOption {
-  id: string;
-  label: string;
-  detail: string;
-  result: string;
-  tone: 'good' | 'warn' | 'bad';
-  effect: DeckEffect;
-}
-export interface EventCard {
-  id: string;
-  title: string;
-  prompt: string;
-  options: DeckOption[];
-}
-
+/** Day budget for a Contract-to-Close run (read by the C2C deck for the on-time closing check). */
 export const C2C_DAY_BUDGET = 75;
-
-/** Build the event deck for a Contract-to-Close run. */
-export function buildC2CDeck(ctx: { market: MarketCondition; difficulty: Difficulty; missedPSATraps: number }): EventCard[] {
-  const hard = ctx.difficulty === 'expert';
-  const insuranceHit = hard ? -45_000 : -25_000;
-
-  const lender: EventCard = {
-    id: 'lender',
-    title: 'Choose your lender',
-    prompt: 'Five quotes are in. Each lender is a different tradeoff of rate, leverage, speed, and recourse.',
-    options: [
-      { id: 'agency', label: 'Agency (Fannie/Freddie)', detail: 'Best rate, non-recourse — but slow and strict DSCR.', result: 'Cheapest money, but the long timeline eats into your critical dates.', tone: 'good', effect: { days: 25, closing: { contingenciesCleared: true } } },
-      { id: 'bridge', label: 'Bridge / debt fund', detail: 'Fast and flexible, higher cost — good for heavy value-add.', result: 'You lock financing fast, but pay up for it.', tone: 'warn', effect: { days: 10, cash: -20_000, closing: { contingenciesCleared: true } } },
-      { id: 'bank', label: 'Local bank (recourse)', detail: 'Relationship lender, lower leverage, wants a guarantor.', result: 'Solid terms, but you sign personally and raise more equity.', tone: 'warn', effect: { days: 18, rep: { lender: 2 }, closing: { contingenciesCleared: true } } },
-    ],
-  };
-
-  const appraisal: EventCard = {
-    id: 'appraisal',
-    title: 'The appraisal came in low',
-    prompt: 'The lender appraisal is ~4% under your contract price, opening a financing gap.',
-    options: [
-      { id: 'retrade', label: 'Retrade the seller', detail: 'Ask the seller to lower price to the appraisal.', result: 'You protect your equity, but the broker remembers the retrade.', tone: 'warn', effect: { rep: { broker: -4 }, days: 7, closing: { contingenciesCleared: true } } },
-      { id: 'addequity', label: 'Add equity to cover the gap', detail: 'Bring more cash and keep the price.', result: 'The deal stays clean, but it costs you more equity.', tone: 'warn', effect: { cash: -60_000, closing: { contingenciesCleared: true } } },
-      { id: 'walk', label: 'Walk away', detail: 'The numbers no longer work.', result: 'You forfeit time spent, but protect your capital.', tone: 'bad', effect: { ends: 'walk' } },
-    ],
-  };
-
-  const dd: EventCard = {
-    id: 'dd',
-    title: 'Due diligence',
-    prompt: ctx.missedPSATraps > 0 ? 'Your PSA left some gaps. How hard do you diligence the asset?' : 'How thoroughly do you diligence the asset before your money goes hard?',
-    options: [
-      { id: 'full', label: 'Full DD (inspections + lease audit + Phase I)', detail: 'Costs time and money, but reveals the truth.', result: ctx.missedPSATraps > 1 ? 'You uncover deferred maintenance the weak PSA won’t let you fully recover — but at least you know.' : 'Clean bill of health — you negotiate a fair repair credit.', tone: 'good', effect: { cash: -18_000, days: 21, closing: { ddDone: true } } },
-      { id: 'light', label: 'Light DD to save time & money', detail: 'Faster and cheaper — but you fly partly blind.', result: 'You save cash now; any hidden issues surface after you own it.', tone: 'bad', effect: { cash: -4_000, days: 8, closing: { ddDone: false } } },
-    ],
-  };
-
-  const insurance: EventCard = {
-    id: 'insurance',
-    title: 'Insurance quote spiked',
-    prompt: 'The first insurance quote came back ~30% over your underwriting.',
-    options: [
-      { id: 'shop', label: 'Shop multiple carriers', detail: 'Takes time, usually finds a better rate.', result: 'You claw most of the increase back by shopping.', tone: 'good', effect: { days: 10 } },
-      { id: 'accept', label: 'Accept the quote to stay on schedule', detail: 'Fast, but you eat the higher premium.', result: 'You stay on schedule but NOI takes a permanent hit.', tone: 'warn', effect: { cash: insuranceHit } },
-      { id: 'deductible', label: 'Raise the deductible', detail: 'Lower premium, more risk retained.', result: 'Premium drops, but a big loss would sting.', tone: 'warn', effect: { rep: {}, days: 4 } },
-    ],
-  };
-
-  const raise: EventCard = {
-    id: 'raise',
-    title: 'Raise the equity',
-    prompt: 'Funds are due to title. How do you cover the equity check?',
-    options: [
-      { id: 'solo', label: 'Raise solo', detail: 'Keep the full promote — but it’s on your network alone.', result: ctx.market === 'tough' ? 'In this tough capital market, you scrape it together just in time.' : 'Your network comes through.', tone: ctx.market === 'tough' ? 'warn' : 'good', effect: { days: 20, closing: { raiseFunded: true } } },
-      { id: 'partners', label: 'Bring capital partners', detail: 'Wider reach and a faster close — you share the promote.', result: 'Partners fill the raise quickly and de-risk the close.', tone: 'good', effect: { days: 12, rep: { lp: 3 }, closing: { raiseFunded: true } } },
-    ],
-  };
-
-  return [lender, appraisal, dd, insurance, raise];
-}

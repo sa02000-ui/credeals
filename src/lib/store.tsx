@@ -29,7 +29,9 @@ import {
   type TreasuryState,
 } from './sim';
 
-const STARTING_CASH = 250_000;
+// Single source of truth for the default starting cash: the Standard difficulty (game start
+// overrides it per chosen difficulty). Keeps store + DIFFICULTY_INFO aligned.
+const STARTING_CASH = DIFFICULTY_INFO.standard.startingCash;
 const PURSUIT_COST = 7_500;
 
 /** A bundle of effects applied to the game state (cash, reputation, log, counters). */
@@ -92,6 +94,9 @@ interface AppContextValue extends AppState {
   cashBalance: number;
   /** admin feature flag: is game mode visible to users at all */
   gameEnabled: boolean;
+  /** last failed background sync (e.g. RLS-blocked write); null when clear */
+  syncError: string | null;
+  clearSyncError: () => void;
   setMode: (m: SimMode) => void;
   setAdmin: (v: boolean) => void;
   setMarket: (m: MarketCondition) => void;
@@ -133,6 +138,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [dbDeals, setDbDeals] = useState<MarketDeal[] | null>(null);
   const [dbStages, setDbStages] = useState<Record<string, DealStatus>>({});
   const [gameEnabled, setGameEnabled] = useState(true);
+  const [syncError, setSyncError] = useState<string | null>(null);
 
   // Global feature flags (admin-controlled): is game mode visible at all?
   useEffect(() => {
@@ -160,11 +166,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     } catch {
       /* ignore */
     }
-    // admin backdoor for the pre-auth prototype: ?admin=1 enables admin tools, ?admin=0 disables.
     try {
-      const a = new URLSearchParams(window.location.search).get('admin');
-      if (a === '1') next = { ...next, isAdmin: true };
-      if (a === '0') next = { ...next, isAdmin: false };
+      // ?admin=1/0 is a LOCAL-ONLY dev shortcut: it only applies when Supabase isn't configured
+      // (prototype/offline mode). With Supabase connected, admin status comes EXCLUSIVELY from
+      // profiles.is_admin (set below) so the query param can't grant privileges to real users.
+      if (!isSupabaseConfigured()) {
+        const a = new URLSearchParams(window.location.search).get('admin');
+        if (a === '1') next = { ...next, isAdmin: true };
+        if (a === '0') next = { ...next, isAdmin: false };
+      } else {
+        next = { ...next, isAdmin: false };
+      }
       // mode chosen on the public landing (Play Simulation / Live Deal)
       const pm = localStorage.getItem('credeals-pending-mode');
       if (pm === 'game' || pm === 'real') {
@@ -273,7 +285,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
       if (configured) {
         setDbStages((m) => ({ ...m, [dealId]: status })); // optimistic
-        updateDealStage(dealId, status).catch(() => {}); // RLS blocks non-editors — refined with user-assignment
+        updateDealStage(dealId, status).catch(() => {
+          // RLS blocked the write (e.g. not an editor on this deal) — roll back so the UI doesn't
+          // lie, and surface why.
+          setDbStages((m) => ({ ...m, [dealId]: prev }));
+          setSyncError("Couldn't save that stage change — you may not have edit access to this deal.");
+        });
       } else {
         setState((s) => ({
           ...s,
@@ -302,6 +319,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setSelectedDeal: (id) => setState((s) => ({ ...s, selectedDealId: id })),
       advanceDays: (n) => { if (n > 0) setState((s) => ({ ...s, day: s.day + Math.round(n) })); },
       gameEnabled,
+      syncError,
+      clearSyncError: () => setSyncError(null),
       applyGameOutcome: (o) =>
         setState((s) => {
           const treasuryEvents = [...s.treasury.events];
@@ -425,7 +444,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setState((s) => ({ ...s, people: { ...s.people, [dealId]: (s.people[dealId] ?? []).filter((p) => p.id !== id) } })),
       resetAll: () => setState(INITIAL),
     };
-  }, [state, hydrated, dbDeals, dbStages, gameEnabled]);
+  }, [state, hydrated, dbDeals, dbStages, gameEnabled, syncError]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }

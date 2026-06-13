@@ -297,11 +297,18 @@ function trancheDS(t: Tranche, globalMonth: number): number {
   return age <= t.ioMonths ? t.amount * r : tranchePayment(t);
 }
 
+/** Clamp a fraction into [0,1] (NaN → 0) so bad inputs can't silently produce nonsense. */
+const clamp01 = (x: number): number => (Number.isFinite(x) ? Math.max(0, Math.min(1, x)) : 0);
+const nonNeg = (x: number): number => (Number.isFinite(x) && x > 0 ? x : 0);
+
 export function runDetailedUW(i: DetailedUWInputs): DetailedUWResult {
   const hold = Math.max(1, Math.min(12, Math.round(i.holdYears)));
-  const units = i.units;
-  const price = i.purchasePrice;
-  const seniorLoan = i.financingType === 'new' ? Math.round(price * i.ltv) : i.loanAmount;
+  const units = Math.max(1, Math.round(nonNeg(i.units)));
+  const price = nonNeg(i.purchasePrice);
+  // ratio inputs are clamped to sane ranges (vacancy/LTV/equity-splits/sale-cost are 0–1)
+  const ltv = clamp01(i.ltv);
+  const vacancy = clamp01(i.vacancy);
+  const seniorLoan = i.financingType === 'new' ? Math.round(price * ltv) : nonNeg(i.loanAmount);
   const grow = (rate: number, y: number) => Math.pow(1 + rate, y - 1);
 
   // --- P&L through hold+1 (per-line, SEQUENTIAL like Excel: value_y = value_{y-1} × (1+g_y)) ---
@@ -339,7 +346,7 @@ export function runDetailedUW(i: DetailedUWInputs): DetailedUWResult {
       otherIncome += v;
       if (y <= hold) incomeDetail[it.id].push(v);
     });
-    const egi = (gpr + otherIncome) * (1 - i.vacancy);
+    const egi = (gpr + otherIncome) * (1 - vacancy);
     const expCtx: LineCtx = { units, price, loan: seniorLoan, egi };
     let opex = 0;
     i.expenses.forEach((it) => {
@@ -413,9 +420,9 @@ export function runDetailedUW(i: DetailedUWInputs): DetailedUWResult {
 
   const debtAtClose = seniorLoan + (i.sellerEnabled ? i.sellerAmount : 0) + (i.suppEnabled && i.suppFundYear <= 0 ? i.suppAmount : 0);
   const equityRequired = Math.max(0, totalUses - debtAtClose);
-  const prefEquity = i.prefEquityEnabled ? equityRequired * i.prefEquityPct : 0;
+  const prefEquity = i.prefEquityEnabled ? equityRequired * clamp01(i.prefEquityPct) : 0;
   const commonEquity = equityRequired - prefEquity;
-  const gpEquity = commonEquity * i.gpCoinvestPct;
+  const gpEquity = commonEquity * clamp01(i.gpCoinvestPct);
   const lpEquity = commonEquity - gpEquity;
 
   const goingInCap = price > 0 ? noiByYear[1] / price : 0;
@@ -423,7 +430,7 @@ export function runDetailedUW(i: DetailedUWInputs): DetailedUWResult {
   // --- Exit ---
   const exitNOI = noiByYear[hold + 1];
   const salePrice = i.exitCapRate > 0 ? exitNOI / i.exitCapRate : 0;
-  const saleCosts = salePrice * i.saleCostPct + sumLines(i.exitItems, { units, price, loan: seniorLoan, egi: 0 });
+  const saleCosts = salePrice * clamp01(i.saleCostPct) + sumLines(i.exitItems, { units, price, loan: seniorLoan, egi: 0 });
   const debtPayoffAtExit = tranches.reduce((a, t) => a + tranchePayoff(t, holdMonths), 0);
   const netSaleProceeds = salePrice - saleCosts - debtPayoffAtExit;
 
@@ -513,7 +520,7 @@ export function runDetailedUW(i: DetailedUWInputs): DetailedUWResult {
     }
     // 4) promote split
     if (cash > 0) {
-      const gpPromote = cash * i.promoteToGp;
+      const gpPromote = cash * clamp01(i.promoteToGp);
       lpPaid += cash - gpPromote;
       gpPaid += gpPromote;
       cash = 0;

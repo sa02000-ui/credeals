@@ -1,36 +1,66 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# CRE Deals (credeals.io)
 
-## Getting Started
+A commercial real-estate **deal-lifecycle simulator and learning game**. Players source deals, run
+napkin and detailed underwriting, negotiate an LOI and PSA, drive a contract-to-close, and operate the
+asset — while a game engine tracks cash, time, reputation, and career progression. The same engine powers
+a **Real mode** for working actual deals (no game layer).
 
-First, run the development server:
+Built with **Next.js 16 (App Router) + React 19 + TypeScript + Tailwind v4 + Supabase**. Deployed on
+Vercel at https://www.credeals.io.
+
+## Architecture
+
+- `src/lib/sim/` — pure, deterministic engines (no React, unit-tested):
+  - `napkin.ts` — quick valuation (GPR → NOI → value-at-cap, DSCR).
+  - `detailedUW.ts` — full multi-year proforma: line-item income/expenses, a debt stack (senior +
+    supplemental + seller note + refi), preferred-equity carry, and an LP/GP promote waterfall with
+    IRR/equity-multiple/cash-on-cash.
+  - `gameEngine.ts` — offer/LOI negotiation, capital raise, and closing resolvers (input → outcome).
+  - `scenarios.ts` / `encounters.ts` — the branching scenario (storylet) framework + PSA clause library.
+  - `personas.ts`, `seed.ts`, `format.ts`, `types.ts`.
+- `src/components/` — the workspace UI (buy box, deal feed, lifecycle phase panels, encounter modals).
+- `src/lib/store.tsx` — the React context: app state, game vs. real mode, Supabase-backed vs. local data.
+- `src/app/` — App Router pages: `/` public landing, `/app` workspace, `/admin` (+ `/admin/scenarios`
+  builder), `/api/*` route handlers, `/login` + `/auth/*`.
+- `supabase/migrations/` — schema (run in the Supabase SQL editor, in order).
+
+## Local development
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+cp .env.local.example .env.local   # then fill in the values below
+npm run dev                         # http://localhost:3210
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### Environment variables (`.env.local`)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+The app uses **distinctly-named** Supabase vars (so it never collides with other local projects):
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Var | Purpose |
+|-----|---------|
+| `NEXT_PUBLIC_SB_URL` | Supabase project URL |
+| `NEXT_PUBLIC_SB_ANON_KEY` | Supabase anon key (public, RLS-protected) |
+| `SB_SERVICE_ROLE_KEY` | Service role key — **server-only**, used by admin route handlers |
+| `CENSUS_API_KEY` | (optional) US Census ACS key for real income/population on the landing |
 
-## Learn More
+Without these the app still runs **open, in local mode** (localStorage, seeded demo deals, no login).
+With them present it gates behind login and reads/writes Supabase under row-level security.
 
-To learn more about Next.js, take a look at the following resources:
+After creating the Supabase project, run the migrations in `supabase/migrations/` (SQL editor), set the
+auth **Site URL** + redirect URLs, and `update profiles set is_admin = true` for your own user.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Scripts
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+npm run dev          # dev server (port 3210)
+npm run build        # production build + typecheck
+npm run lint         # eslint
+npm test             # vitest — unit tests for the financial + game engines
+npm run test:watch   # vitest watch mode
+```
 
-## Deploy on Vercel
+## Tests
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+The financial and game engines are covered by `src/lib/sim/__tests__/` — the proforma identities
+(NOI, equity, waterfall reconciliation), per-cell overrides, input clamping, IRR/PMT math, and the
+negotiation/closing resolvers. Run `npm test`.

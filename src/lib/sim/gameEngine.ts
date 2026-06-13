@@ -7,6 +7,7 @@
  */
 
 import type { Persona } from './personas';
+import { usd } from './format';
 
 export type MarketCondition = 'hot' | 'balanced' | 'tough';
 
@@ -363,6 +364,7 @@ export function applyRep(r: Reputation, patch: Partial<Reputation>): Reputation 
   };
 }
 
+// Currency formatting lives in format.ts (usd) — delegate so there's one source of truth.
 function fmt(n: number): string {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0, notation: 'compact' }).format(n);
+  return usd(n, { compact: true });
 }
