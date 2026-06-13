@@ -110,6 +110,12 @@ interface AppState {
   tradedAwayDealIds: string[];
   /** highest simulated day already processed for deal arrivals/expiries (so reloads don't re-fire) */
   dealFlowDay: number;
+  /** last day the player took a meaningful action (drives idle nudges) */
+  lastActionDay: number;
+  /** highest idle-nudge level fired in the current idle streak (resets to 0 on any action) */
+  idleLevel: number;
+  /** traded-away deals a broker has already called back about (so it fires once) */
+  calledBackDealIds: string[];
 }
 
 const CARRY_PER_DAY = 250; // light daily carrying cost so time costs money
@@ -144,6 +150,9 @@ const INITIAL: AppState = {
   notifications: [],
   tradedAwayDealIds: [],
   dealFlowDay: 1,
+  lastActionDay: 1,
+  idleLevel: 0,
+  calledBackDealIds: [],
 };
 
 interface AppContextValue extends AppState {
@@ -310,6 +319,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const pipe = buildPipeline(pool, state.sessionSeed);
     const arrived = pipe.filter((e) => e.arrivalDay > fromDay && e.arrivalDay <= toDay);
     const expired = pipe.filter((e) => e.expiresOnDay > fromDay && e.expiresOnDay <= toDay && status(e.deal.id) === 'new' && !state.tradedAwayDealIds.includes(e.deal.id));
+    // Broker callbacks (Phase D): a traded-away deal can fall out of contract and come back ~30 days
+    // later. The deal un-trades (reappears in the feed); a deal you'd underwritten gets a warmer call.
+    const CALLBACK_DELAY = 30;
+    const callbacks = pipe.filter((e) => state.tradedAwayDealIds.includes(e.deal.id) && !state.calledBackDealIds.includes(e.deal.id) && e.expiresOnDay + CALLBACK_DELAY > fromDay && e.expiresOnDay + CALLBACK_DELAY <= toDay);
+    if (!arrived.length && !expired.length && !callbacks.length) return;
+    const cbIds = callbacks.map((e) => e.deal.id);
     setState((s) => {
       if (s.dealFlowDay >= toDay) return s; // already processed (guards double-invoke)
       const notes: GameNotification[] = [];
@@ -320,9 +335,40 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       for (const e of expired) {
         notes.push({ id: `nt-exp-${e.deal.id}-${e.expiresOnDay}`, ts: Date.now(), day: e.expiresOnDay, kind: 'deal', title: 'A deal traded away', body: `${e.deal.name} went under contract with another buyer — you didn't act in time.${e.channel === 'broker-off-market' ? ' Off-market looks move fastest.' : ''}`, read: false });
       }
-      return { ...s, dealFlowDay: toDay, tradedAwayDealIds: [...s.tradedAwayDealIds, ...expired.map((e) => e.deal.id)], notifications: [...s.notifications, ...notes].slice(-60) };
+      for (const e of callbacks) {
+        const knew = !!s.dealDNA[e.deal.id];
+        notes.push({ id: `nt-cb-${e.deal.id}-${e.expiresOnDay + CALLBACK_DELAY}`, ts: Date.now(), day: toDay, kind: 'opportunity', title: '📞 Broker callback', body: knew ? `${e.deal.name} — the one you'd underwritten — just fell out of contract. The broker called you first. Still interested?` : `${e.deal.name} fell out of contract and is back on the market. The broker thought of you. Want another look?`, read: false, dealId: e.deal.id });
+      }
+      const tradedAway = [...s.tradedAwayDealIds.filter((id) => !cbIds.includes(id)), ...expired.map((e) => e.deal.id)];
+      return { ...s, dealFlowDay: toDay, tradedAwayDealIds: tradedAway, calledBackDealIds: [...s.calledBackDealIds, ...cbIds], notifications: [...s.notifications, ...notes].slice(-60) };
     });
   }, [state.day, state.dealFlowDay, hydrated, state.mode, state.difficulty, dbDeals]);
+
+  // Idle engagement (Phase D): if the player goes quiet, escalate — Ray nudges, then a carry-cost
+  // warning, then surface an opportunity. Each level fires once per idle streak (idleLevel resets to 0
+  // on any action). Keeps players moving the way a real pipeline's pressure does.
+  useEffect(() => {
+    if (!hydrated || state.mode !== 'game' || !state.difficulty) return;
+    const idleDays = state.day - state.lastActionDay;
+    const burned = state.carryPerDay * idleDays;
+    const levels: { lvl: number; days: number; kind: 'coach' | 'idle' | 'opportunity'; title: string; body: string }[] = [
+      { lvl: 1, days: 4, kind: 'coach', title: 'Ray', body: `You've gone quiet for a few days. Momentum matters — every idle day burns ~$${state.carryPerDay} in carry whether or not you're working a deal. What's our next move?` },
+      { lvl: 2, days: 8, kind: 'idle', title: '⏳ Time is money', body: `${idleDays} days idle — roughly $${burned.toLocaleString()} in carrying costs with nothing under contract. Underwrite a deal or tighten your buy box to see more flow.` },
+      { lvl: 3, days: 13, kind: 'opportunity', title: '✨ A look worth taking', body: `Quiet stretch — but a broker just flagged something that fits your box. Don't let the meter run; go take a look.` },
+    ];
+    const next = [...levels].reverse().find((l) => idleDays >= l.days && state.idleLevel < l.lvl);
+    if (!next) return;
+    setState((s) => {
+      if (s.idleLevel >= next.lvl) return s;
+      const ts = Date.now();
+      const note: GameNotification = { id: `nt-idle-${next.lvl}-${s.day}`, ts, day: s.day, kind: next.kind, title: next.title, body: next.body, read: false };
+      if (next.kind === 'coach') {
+        const cm: CoachMessage = { id: `cm-idle-${ts}`, from: 'coach', text: next.body, ts, trigger: 'idle' };
+        return { ...s, idleLevel: next.lvl, coachMessages: [...s.coachMessages, cm].slice(-100), notifications: [...s.notifications, note].slice(-60) };
+      }
+      return { ...s, idleLevel: next.lvl, notifications: [...s.notifications, note].slice(-60) };
+    });
+  }, [state.day, state.lastActionDay, state.idleLevel, hydrated, state.mode, state.difficulty]);
 
   // When Supabase is configured: load the signed-in user's profile (is_admin) + their deals.
   // Session/user identity comes from the cookie (see token.ts) to avoid the supabase-js
@@ -414,6 +460,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     function setStatus(dealId: string, status: DealStatus) {
       const prev = statusOf(dealId);
       if (prev === status) return;
+      setState((s) => ({ ...s, lastActionDay: s.day, idleLevel: 0 })); // any stage change counts as activity
       chargePursuit(dealId, status, prev);
       const dayCost = STAGE_DAY_COST[status] ?? 0;
       if (dayCost > 0 && state.mode === 'game') {
@@ -452,7 +499,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         })),
       setClockPaused: (v) => setState((s) => ({ ...s, clockPaused: v })),
       setClockSpeed: (minutesPerDay) => setState((s) => ({ ...s, clockMinutesPerDay: minutesPerDay })),
-      setSelectedDeal: (id) => setState((s) => ({ ...s, selectedDealId: id })),
+      setSelectedDeal: (id) => setState((s) => ({ ...s, selectedDealId: id, lastActionDay: s.day, idleLevel: 0 })),
       advanceDays: (n) => { if (n > 0) setState((s) => ({ ...s, day: s.day + Math.round(n) })); },
       gameEnabled,
       syncError,
@@ -574,6 +621,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             : s.game.log;
           return {
             ...s,
+            lastActionDay: s.day, // a game decision counts as activity (resets idle nudges)
+            idleLevel: 0,
             treasury: { ...s.treasury, events: treasuryEvents },
             game: {
               ...s.game,
@@ -585,7 +634,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           };
         }),
       updateBuyBox: (patch) => setState((s) => ({ ...s, buyBox: { ...s.buyBox, ...patch } })),
-      approveBuyBox: () => setState((s) => ({ ...s, buyBoxApproved: true })),
+      approveBuyBox: () => setState((s) => ({ ...s, buyBoxApproved: true, lastActionDay: s.day, idleLevel: 0 })),
       editBuyBox: () => setState((s) => ({ ...s, buyBoxApproved: false })),
       statusOf,
       setStatus,
