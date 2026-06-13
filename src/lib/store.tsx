@@ -221,6 +221,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       } else {
         next = { ...next, isAdmin: false };
       }
+      // migrate players who started before onboarding existed: a chosen difficulty means they're past it
+      if (next.difficulty && !next.onboardingComplete) next = { ...next, onboardingComplete: true };
       // mode chosen on the public landing (Play Simulation / Live Deal)
       const pm = localStorage.getItem('credeals-pending-mode');
       if (pm === 'game' || pm === 'real') {

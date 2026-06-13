@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useApp } from '@/lib/store';
 import { InfoTip } from '@/components/InfoTip';
-import { scoreUW } from '@/lib/sim';
+import { scoreUW, getCoachMessage } from '@/lib/sim';
 import {
   analyzeDeal,
   assetConfig,
@@ -41,7 +41,7 @@ export function NapkinPanel({
   deal: MarketDeal;
   onOpenConversation: () => void;
 }) {
-  const { buyBox, overridesOf, setOverride, resetOverrides, statusOf, setStatus, mode, isAdmin, commentsOf, filesOf, addFiles, coachingMode, updateDealDNA } =
+  const { buyBox, overridesOf, setOverride, resetOverrides, statusOf, setStatus, mode, isAdmin, commentsOf, filesOf, addFiles, coachingMode, updateDealDNA, addCoachMessage } =
     useApp();
   const ov = overridesOf(deal.id);
   const eff = { ...defaultOverrides(deal), ...ov };
@@ -62,6 +62,17 @@ export function NapkinPanel({
     if (mode === 'game') updateDealDNA(deal.id, { uwScore: uw.score });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [uw.score, deal.id, mode]);
+
+  // proactive coach nudge when assumptions turn aggressive (full coaching only), once per deal
+  const nudgedRef = useRef(false);
+  useEffect(() => {
+    if (mode === 'game' && coachingMode === 'full' && uw.score >= 3 && !nudgedRef.current) {
+      nudgedRef.current = true;
+      const t = getCoachMessage('napkin-aggressive');
+      if (t) addCoachMessage({ from: 'coach', text: t, dealId: deal.id, phase: 'napkin', trigger: 'napkin-aggressive' });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [uw.score, mode, coachingMode]);
   const match = matchBuyBox(deal, buyBox);
   const status = statusOf(deal.id);
   const edited = Object.keys(ov).length > 0;

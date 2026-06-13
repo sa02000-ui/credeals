@@ -8,7 +8,8 @@ import { DealPhases } from '@/components/DealPhases';
 import { AddDealModal } from '@/components/AddDealModal';
 import { ConversationPanel } from '@/components/ConversationPanel';
 import { CareerHud } from '@/components/CareerHud';
-import { GameStartModal } from '@/components/GameStartModal';
+import { OnboardingFlow } from '@/components/OnboardingFlow';
+import { CoachPanel } from '@/components/CoachPanel';
 import { ObjectiveHud } from '@/components/ObjectiveHud';
 import { useApp } from '@/lib/store';
 import { stageDef } from '@/lib/sim';
@@ -18,13 +19,13 @@ function scrollTo(id: string) {
 }
 
 export default function Home() {
-  const { deals, buyBoxApproved, statusOf, setStatus, mode, difficulty, selectedDealId, setSelectedDeal, syncError, clearSyncError } = useApp();
+  const { deals, buyBoxApproved, statusOf, setStatus, mode, difficulty, onboardingComplete, selectedDealId, setSelectedDeal, syncError, clearSyncError } = useApp();
   const selectedId = selectedDealId;
   const [showAdd, setShowAdd] = useState(false);
   const [convoId, setConvoId] = useState<string | null>(null);
   const selected = deals.find((d) => d.id === selectedId) ?? null;
   const convoDeal = deals.find((d) => d.id === convoId) ?? null;
-  const gameNotStarted = mode === 'game' && difficulty === null;
+  const needsOnboarding = mode === 'game' && !onboardingComplete;
 
   // Detailed UW needs every pixel: auto-hide the sidebar (buy box + feed) on that tab.
   const [wsPhase, setWsPhase] = useState('napkin');
@@ -112,7 +113,8 @@ export default function Home() {
 
       {showAdd && <AddDealModal onClose={() => setShowAdd(false)} onAdded={(id) => selectDeal(id)} />}
       {convoDeal && <ConversationPanel dealId={convoDeal.id} dealName={convoDeal.name} onClose={() => setConvoId(null)} />}
-      {gameNotStarted && <GameStartModal />}
+      {needsOnboarding && <OnboardingFlow />}
+      {mode === 'game' && <CoachPanel />}
 
       {syncError && (
         <div className="fixed bottom-4 right-4 z-50 flex max-w-sm items-start gap-2 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700 shadow-xl">

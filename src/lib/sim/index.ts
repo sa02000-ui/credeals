@@ -14,3 +14,4 @@ export * from './sessionSeed';
 export * from './uwScore';
 export * from './playerModel';
 export * from './relationshipLedger';
+export * from './coachMessages';
