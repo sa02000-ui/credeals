@@ -68,8 +68,10 @@ export interface GameOutcome {
 
 interface AppState {
   mode: SimMode;
-  /** admin-only features (e.g. persona tuning). Comes from Supabase profile.is_admin later;
-   * for now toggled via ?admin=1 / ?admin=0 in the URL so end users never see admin tools. */
+  /** admin-only features (persona tuning, admin console). Set EXCLUSIVELY from the signed-in user's
+   * Supabase profiles.is_admin (loaded server-side via the cookie session) — never from a URL param,
+   * env flag, or client toggle, so the security posture is identical on every platform. Every
+   * privileged action is independently re-verified on the server (requireAdmin). */
   isAdmin: boolean;
   buyBox: BuyBox;
   buyBoxApproved: boolean;
@@ -152,7 +154,6 @@ interface AppContextValue extends AppState {
   /** finalize a deal at exit: record projected/actual returns + roll the result into the player model (once) */
   finalizeExit: (dealId: string, projectedIRR: number, actualIRR: number) => void;
   setMode: (m: SimMode) => void;
-  setAdmin: (v: boolean) => void;
   setMarket: (m: MarketCondition) => void;
   startGame: (d: Difficulty, minutesPerDay?: number) => void;
   setClockPaused: (v: boolean) => void;
@@ -221,16 +222,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       /* ignore */
     }
     try {
-      // ?admin=1/0 is a LOCAL-ONLY dev shortcut: it only applies when Supabase isn't configured
-      // (prototype/offline mode). With Supabase connected, admin status comes EXCLUSIVELY from
-      // profiles.is_admin (set below) so the query param can't grant privileges to real users.
-      if (!isSupabaseConfigured()) {
-        const a = new URLSearchParams(window.location.search).get('admin');
-        if (a === '1') next = { ...next, isAdmin: true };
-        if (a === '0') next = { ...next, isAdmin: false };
-      } else {
-        next = { ...next, isAdmin: false };
-      }
+      // SECURITY: admin is never granted on the client. No URL param, no env/platform special-casing.
+      // Force it false on load (so a stale persisted flag can't linger); the server-backed profile
+      // load below re-grants it only if the signed-in user is genuinely an admin. Same on every platform.
+      next = { ...next, isAdmin: false };
       // migrate players who started before onboarding existed: a chosen difficulty means they're past it
       if (next.difficulty && !next.onboardingComplete) next = { ...next, onboardingComplete: true };
       // mode chosen on the public landing (Play Simulation / Live Deal)
@@ -373,7 +368,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       deals,
       cashBalance: treasuryBalance(state.treasury) - state.carryPerDay * Math.max(0, state.day - 1),
       setMode: (mode) => setState((s) => ({ ...s, mode })),
-      setAdmin: (v) => setState((s) => ({ ...s, isAdmin: v })),
       setMarket: (m) => setState((s) => ({ ...s, game: { ...s.game, market: m } })),
       startGame: (d, minutesPerDay) =>
         setState((s) => ({
