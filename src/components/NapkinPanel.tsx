@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useApp } from '@/lib/store';
 import { InfoTip } from '@/components/InfoTip';
+import { scoreUW } from '@/lib/sim';
 import {
   analyzeDeal,
   assetConfig,
@@ -40,11 +41,27 @@ export function NapkinPanel({
   deal: MarketDeal;
   onOpenConversation: () => void;
 }) {
-  const { buyBox, overridesOf, setOverride, resetOverrides, statusOf, setStatus, mode, isAdmin, commentsOf, filesOf, addFiles } =
+  const { buyBox, overridesOf, setOverride, resetOverrides, statusOf, setStatus, mode, isAdmin, commentsOf, filesOf, addFiles, coachingMode, updateDealDNA } =
     useApp();
   const ov = overridesOf(deal.id);
   const eff = { ...defaultOverrides(deal), ...ov };
   const r = analyzeDeal(deal, ov);
+
+  // UW aggressiveness (game mode): how far the player's assumptions push vs. asset-class consensus
+  const uw = useMemo(
+    () => scoreUW({
+      rentVsMarket: eff.avgInPlaceRent > 0 ? eff.avgMarketRent / eff.avgInPlaceRent : 1,
+      expenseRatio: eff.proformaExpenseRatio,
+      exitCapRate: eff.stabilizedCapRate,
+      capexPerUnit: 7500,
+      vacancyStabilized: eff.stabilizedVacancy,
+    }, deal.assetClass),
+    [eff.avgInPlaceRent, eff.avgMarketRent, eff.proformaExpenseRatio, eff.stabilizedCapRate, eff.stabilizedVacancy, deal.assetClass],
+  );
+  useEffect(() => {
+    if (mode === 'game') updateDealDNA(deal.id, { uwScore: uw.score });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [uw.score, deal.id, mode]);
   const match = matchBuyBox(deal, buyBox);
   const status = statusOf(deal.id);
   const edited = Object.keys(ov).length > 0;
@@ -158,6 +175,9 @@ export function NapkinPanel({
             </div>
           </div>
         </div>
+
+        {/* UW aggressiveness band (game mode; hidden for the silent coaching profile) */}
+        {mode === 'game' && coachingMode !== 'silent' && <UWBand uw={uw} />}
       </div>
 
       {/* Financing */}
@@ -393,6 +413,26 @@ function SensitivityGrid({ s, offer }: { s: Sensitivity2D; offer: number }) {
 
 function Chip({ children }: { children: React.ReactNode }) {
   return <span className="rounded bg-slate-100 px-1.5 py-0.5">{children}</span>;
+}
+
+function UWBand({ uw }: { uw: ReturnType<typeof scoreUW> }) {
+  const pos = Math.max(0, Math.min(100, ((uw.score - 1) / 3) * 100)); // score 1–4 → 0–100%
+  const tone = uw.score >= 3.5 ? 'text-red-600' : uw.score >= 2.8 ? 'text-amber-600' : uw.score >= 2.0 ? 'text-slate-700' : 'text-emerald-600';
+  return (
+    <div className="mt-3 rounded-lg border-2 border-slate-200 bg-slate-50 p-2.5">
+      <div className="flex items-center gap-1.5">
+        <span className="text-xs font-bold text-slate-700">Underwriting aggressiveness</span>
+        <InfoTip title="UW aggressiveness" what="How far your assumptions (rent vs. in-place, expense ratio, exit cap, vacancy) push beyond market consensus for this asset class. Aggressive assumptions inflate projected returns — and make the business plan harder to actually hit." app="Conservative wins LP trust and beats projections; aggressive wins competitive deals but raises the odds of missing in Asset Management." />
+        <span className={`ml-auto text-xs font-bold ${tone}`}>{uw.label} · {uw.score.toFixed(1)}</span>
+      </div>
+      <div className="relative mt-1.5 h-2 w-full rounded-full bg-gradient-to-r from-emerald-300 via-amber-300 to-red-400">
+        <div className="absolute top-1/2 h-3.5 w-1 -translate-y-1/2 rounded-full bg-slate-900" style={{ left: `${pos}%` }} />
+      </div>
+      <div className="mt-1 flex justify-between text-[9px] uppercase tracking-wide text-slate-400">
+        <span>Conservative</span><span>Market</span><span>Aggressive</span>
+      </div>
+    </div>
+  );
 }
 
 function Counterparties({ dealId }: { dealId: string }) {

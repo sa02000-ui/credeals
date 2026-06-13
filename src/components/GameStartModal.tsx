@@ -2,18 +2,18 @@
 
 import { useState } from 'react';
 import { useApp } from '@/lib/store';
-import { DIFFICULTY_INFO, usd, type Difficulty } from '@/lib/sim';
+import { PROFILE_CONFIGS, usd, type ExperienceProfile } from '@/lib/sim';
 
 const SPEEDS = [2, 5, 10]; // real minutes per simulated day
+const PROFILE_ORDER: ExperienceProfile[] = ['brand-new', 'studied', 'some-experience', 'mixed', 'expert'];
 
 /**
- * Shown once when a game hasn't been started (game mode + no difficulty chosen). Gives the high-level
- * goal + how-to-play, then asks the player to pick a difficulty + clock pace (DESIGN §22 C/H). After
- * this the Objective/Coach HUD takes over and the clock starts.
+ * Day-0 onboarding (design doc Part 3): the player picks an EXPERIENCE PROFILE (which sets starting
+ * cash, carry, coaching mode, and counterparty difficulty) + clock pace. Shown when game mode is on
+ * and no profile has been chosen yet. After this the Objective/Coach HUD takes over and the clock starts.
  */
 export function GameStartModal() {
-  const { startGame, setMode } = useApp();
-  const order: Difficulty[] = ['guided', 'standard', 'expert'];
+  const { setExperienceProfile, setMode } = useApp();
   const [speed, setSpeed] = useState(2);
 
   return (
@@ -41,18 +41,18 @@ export function GameStartModal() {
           ))}
         </div>
 
-        {/* Difficulty */}
-        <h3 className="mt-5 text-sm font-semibold text-slate-800">Choose your difficulty to begin</h3>
-        <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
-          {order.map((d) => {
-            const info = DIFFICULTY_INFO[d];
+        {/* Experience profile — sets starting cash, carry, coaching, and difficulty */}
+        <h3 className="mt-5 text-sm font-semibold text-slate-800">How experienced are you? (pick one to begin)</h3>
+        <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+          {PROFILE_ORDER.map((p) => {
+            const cfg = PROFILE_CONFIGS[p];
             return (
-              <button key={d} onClick={() => startGame(d, speed)} className="rounded-xl border-2 border-slate-200 p-3 text-left transition hover:border-slate-900 hover:bg-slate-50">
+              <button key={p} onClick={() => setExperienceProfile(p, speed)} className="rounded-xl border-2 border-slate-200 p-3 text-left transition hover:border-slate-900 hover:bg-slate-50">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-bold text-slate-900">{info.label}</span>
-                  <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-semibold text-slate-600">{usd(info.startingCash, { compact: true })}</span>
+                  <span className="text-sm font-bold text-slate-900">{cfg.label}</span>
+                  <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-semibold text-slate-600">{usd(cfg.startingCash, { compact: true })} · ${cfg.carryPerDay}/day</span>
                 </div>
-                <p className="mt-1 text-[11px] leading-relaxed text-slate-500">{info.blurb}</p>
+                <p className="mt-1 text-[11px] leading-relaxed text-slate-500">{cfg.blurb}</p>
               </button>
             );
           })}

@@ -12,7 +12,20 @@ import {
   applyRep,
   treasuryBalance,
   DIFFICULTY_INFO,
+  PROFILE_CONFIGS,
+  INITIAL_PLAYER_MODEL,
+  generateSessionSeed,
+  newRelationship,
+  recordInteraction,
   type Difficulty,
+  type ExperienceProfile,
+  type CoachingMode,
+  type SessionSeed,
+  type PlayerModel,
+  type DealDNA,
+  type CoachMessage,
+  type CounterpartyRelationship,
+  type InteractionType,
   type GameState,
   type MarketCondition,
   type Reputation,
@@ -28,6 +41,11 @@ import {
   type SimMode,
   type TreasuryState,
 } from './sim';
+
+/** Experience profile → the existing difficulty knob that gates scenario/closing harshness. */
+const PROFILE_TO_DIFFICULTY: Record<ExperienceProfile, Difficulty> = {
+  'brand-new': 'guided', studied: 'guided', 'some-experience': 'standard', mixed: 'standard', expert: 'expert',
+};
 
 // Single source of truth for the default starting cash: the Standard difficulty (game start
 // overrides it per chosen difficulty). Keeps store + DIFFICULTY_INFO aligned.
@@ -66,6 +84,17 @@ interface AppState {
   /** real minutes per simulated day (player-chosen pace; 1 sim day = N real minutes) */
   clockMinutesPerDay: number;
   selectedDealId: string | null;
+
+  // --- Game-design layer (Replit doc) ---
+  experienceProfile: ExperienceProfile | null;
+  onboardingComplete: boolean;
+  coachingMode: CoachingMode;
+  carryPerDay: number;
+  sessionSeed: SessionSeed | null;
+  playerModel: PlayerModel;
+  dealDNA: Record<string, DealDNA>;
+  relationships: Record<string, CounterpartyRelationship>;
+  coachMessages: CoachMessage[];
 }
 
 const CARRY_PER_DAY = 250; // light daily carrying cost so time costs money
@@ -87,6 +116,15 @@ const INITIAL: AppState = {
   clockPaused: true,
   clockMinutesPerDay: 2,
   selectedDealId: null,
+  experienceProfile: null,
+  onboardingComplete: false,
+  coachingMode: 'full',
+  carryPerDay: CARRY_PER_DAY,
+  sessionSeed: null,
+  playerModel: INITIAL_PLAYER_MODEL,
+  dealDNA: {},
+  relationships: {},
+  coachMessages: [],
 };
 
 interface AppContextValue extends AppState {
@@ -97,6 +135,12 @@ interface AppContextValue extends AppState {
   /** last failed background sync (e.g. RLS-blocked write); null when clear */
   syncError: string | null;
   clearSyncError: () => void;
+  // --- Game-design layer ---
+  setExperienceProfile: (profile: ExperienceProfile, minutesPerDay?: number) => void;
+  completeOnboarding: () => void;
+  updateDealDNA: (dealId: string, patch: Partial<DealDNA>) => void;
+  updateRelationship: (personaId: string, type: InteractionType, dealId: string, note: string) => void;
+  addCoachMessage: (message: Omit<CoachMessage, 'id' | 'ts'>) => void;
   setMode: (m: SimMode) => void;
   setAdmin: (v: boolean) => void;
   setMarket: (m: MarketCondition) => void;
@@ -206,7 +250,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (!hydrated) return;
     if (state.mode !== 'game' || !state.difficulty || state.clockPaused) return;
     const ms = Math.max(0.25, state.clockMinutesPerDay) * 60_000;
-    const t = setInterval(() => setState((s) => ({ ...s, day: s.day + 1 })), ms);
+    const t = setInterval(
+      () =>
+        setState((s) => {
+          const day = s.day + 1;
+          // mid-game market shift (design doc Part 4, layer 4): fires once on its seeded day
+          const seed = s.sessionSeed;
+          if (seed && day >= seed.marketShiftDay && s.game.market !== seed.marketShiftTo) {
+            const note = { id: `mkt-${Date.now()}`, ts: Date.now(), title: `Market shifted to ${seed.marketShiftTo}`, detail: `The capital markets turned ${seed.marketShiftTo} around day ${day}. Cap rates, rents, and equity availability move with it.`, lesson: 'Markets move under you mid-hold — the same financing call can be right in one cycle and wrong in the next.' };
+            return { ...s, day, game: { ...s.game, market: seed.marketShiftTo, log: [note, ...s.game.log].slice(0, 50) } };
+          }
+          return { ...s, day };
+        }),
+      ms,
+    );
     return () => clearInterval(t);
   }, [hydrated, state.mode, state.difficulty, state.clockPaused, state.clockMinutesPerDay]);
 
@@ -302,7 +359,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return {
       ...state,
       deals,
-      cashBalance: treasuryBalance(state.treasury) - CARRY_PER_DAY * Math.max(0, state.day - 1),
+      cashBalance: treasuryBalance(state.treasury) - state.carryPerDay * Math.max(0, state.day - 1),
       setMode: (mode) => setState((s) => ({ ...s, mode })),
       setAdmin: (v) => setState((s) => ({ ...s, isAdmin: v })),
       setMarket: (m) => setState((s) => ({ ...s, game: { ...s.game, market: m } })),
@@ -321,6 +378,41 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       gameEnabled,
       syncError,
       clearSyncError: () => setSyncError(null),
+      setExperienceProfile: (profile, minutesPerDay) =>
+        setState((s) => {
+          const cfg = PROFILE_CONFIGS[profile];
+          return {
+            ...s,
+            experienceProfile: profile,
+            difficulty: PROFILE_TO_DIFFICULTY[profile],
+            coachingMode: cfg.coachingMode,
+            carryPerDay: cfg.carryPerDay,
+            clockPaused: false,
+            clockMinutesPerDay: minutesPerDay ?? s.clockMinutesPerDay,
+            treasury: { ...s.treasury, startingBalance: cfg.startingCash },
+            sessionSeed: s.sessionSeed ?? generateSessionSeed(Math.max(40, SEED_DEALS.length)),
+          };
+        }),
+      completeOnboarding: () => setState((s) => ({ ...s, onboardingComplete: true })),
+      updateDealDNA: (dealId, patch) =>
+        setState((s) => {
+          const prev = s.dealDNA[dealId];
+          const base: DealDNA = prev ?? {
+            dealId, uwScore: 2, brokerRelAtLOI: 50, sellerPersonaId: '', brokerPersonaId: '', psaCatchScore: 0,
+            ddDepth: 'moderate', lenderChosen: '', raiseStructure: 'solo', businessPlan: 'value-add', closingScore: 0, amDecisions: [],
+          };
+          return { ...s, dealDNA: { ...s.dealDNA, [dealId]: { ...base, ...patch } } };
+        }),
+      updateRelationship: (personaId, type, dealId, note) =>
+        setState((s) => {
+          const rel = s.relationships[personaId] ?? newRelationship(personaId);
+          return { ...s, relationships: { ...s.relationships, [personaId]: recordInteraction(rel, type, dealId, note, s.day) } };
+        }),
+      addCoachMessage: (message) =>
+        setState((s) => ({
+          ...s,
+          coachMessages: [...s.coachMessages, { ...message, id: `cm-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, ts: Date.now() }].slice(-100),
+        })),
       applyGameOutcome: (o) =>
         setState((s) => {
           const treasuryEvents = [...s.treasury.events];
