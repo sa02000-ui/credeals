@@ -5,6 +5,7 @@ import { INITIAL_PLAYER_MODEL, updatePlayerModel, shouldDeliverLesson, recordLes
 import { newRelationship, recordInteraction, applyBrokerRelToSellerTraits } from '../relationshipLedger';
 import { drawAMCards, AM_CARDS } from '../amCards';
 import { pickPersona, dealCounterparties } from '../personas';
+import { buildNapkinScenarios, buildLOIScenarios, buildC2CScenarios, type Scenario } from '../scenarios';
 import type { DealDNA, SessionSeed } from '../gameTypes';
 
 describe('scoreUW', () => {
@@ -128,5 +129,32 @@ describe('persona jitter (session seed)', () => {
     const b = dealCounterparties('deal-x', 1);
     expect(a.broker.id).toBe(b.broker.id);
     expect(a.seller.id).toBe(b.seller.id);
+  });
+});
+
+describe('scenario decks are structurally sound', () => {
+  // every entry step exists, and every next/branch.next points at a real step (no dead ends)
+  function assertValid(s: Scenario) {
+    expect(s.steps[s.entry], `${s.id}: entry "${s.entry}" missing`).toBeTruthy();
+    for (const step of Object.values(s.steps)) {
+      expect(step.options.length, `${s.id}.${step.id}: no options`).toBeGreaterThan(0);
+      for (const opt of step.options) {
+        if (opt.next) expect(s.steps[opt.next], `${s.id}.${step.id}.${opt.id}: next "${opt.next}" missing`).toBeTruthy();
+        for (const b of opt.branches ?? []) {
+          if (b.next) expect(s.steps[b.next], `${s.id}.${step.id}.${opt.id}: branch next "${b.next}" missing`).toBeTruthy();
+        }
+      }
+    }
+  }
+  const ctx = { market: 'balanced' as const, difficulty: 'standard' as const };
+  it('napkin deck is valid (both market orderings)', () => {
+    buildNapkinScenarios(ctx).forEach(assertValid);
+    buildNapkinScenarios({ ...ctx, market: 'hot' }).forEach(assertValid);
+  });
+  it('LOI deck is valid', () => {
+    buildLOIScenarios(ctx).forEach(assertValid);
+  });
+  it('C2C deck is valid', () => {
+    buildC2CScenarios({ ...ctx, missedPSATraps: 2 }).forEach(assertValid);
   });
 });

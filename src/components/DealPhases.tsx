@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useApp } from '@/lib/store';
+import { useDealLocal } from '@/lib/hooks/useDealLocal';
+import { getCoachMessage } from '@/lib/sim';
 import { InfoTip } from '@/components/InfoTip';
 import { NapkinPanel } from '@/components/NapkinPanel';
 import { DetailedUWPanel } from '@/components/DetailedUWPanel';
@@ -23,11 +25,33 @@ const PHASE_INFO: Record<DealStage, string> = {
   archived: 'step.pick',
 };
 
+// Ray (coach) chimes in once when a deal first reaches each stage — game mode, non-silent profiles.
+const STAGE_COACH: Partial<Record<DealStage, string>> = {
+  napkin: 'first-deal',
+  detailed: 'detailed-enter',
+  loi: 'loi-submit',
+  c2c: 'c2c-enter',
+  am: 'am-enter',
+};
+
 export function DealPhases({ deal, onOpenConversation, onPhaseChange }: { deal: MarketDeal; onOpenConversation: () => void; onPhaseChange?: (phase: string) => void }) {
-  const { statusOf } = useApp();
+  const { statusOf, mode, difficulty, coachingMode, addCoachMessage } = useApp();
   const status = statusOf(deal.id);
   const unlockedThrough = status === 'archived' ? 0 : Math.max(0, stageIndex(status));
   const [phase, setPhase] = useState<Tab>(status === 'new' || status === 'archived' ? 'napkin' : status);
+
+  // Ray narrates each stage the first time this deal reaches it (game mode, non-silent profiles).
+  const [coached, setCoached] = useDealLocal<string[]>('coached-stages', deal.id, []);
+  useEffect(() => {
+    if (mode !== 'game' || !difficulty || coachingMode === 'silent') return;
+    const trigger = STAGE_COACH[status];
+    if (!trigger || coached.includes(status)) return;
+    const text = getCoachMessage(trigger);
+    if (!text) return;
+    addCoachMessage({ from: 'coach', text, dealId: deal.id, phase: status, trigger });
+    setCoached((c) => (c.includes(status) ? c : [...c, status]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, mode, difficulty, coachingMode]);
 
   // Guided flow: when the deal advances a stage (e.g. "Pass napkin → Detailed UW"), follow it to that tab.
   const prevStatus = useRef(status);

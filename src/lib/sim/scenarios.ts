@@ -191,3 +191,108 @@ export function buildC2CScenarios(ctx: DeckCtx): Scenario[] {
 
   return [lender, appraisal, dd, insurance, raise];
 }
+
+// ---------------------------------------------------------------------------
+//  Early-stage decks — these make the game feel alive BEFORE the contract.
+//  Napkin (sourcing/first-look color) and LOI (pre-offer color) scenarios so a
+//  player meets live decisions from the very first deal, not only at C2C.
+// ---------------------------------------------------------------------------
+
+export interface EarlyCtx {
+  market: MarketCondition;
+  difficulty: Difficulty;
+}
+
+/** Sourcing / napkin-stage encounters — broker dynamics + underwriting discipline. */
+export function buildNapkinScenarios(ctx: EarlyCtx): Scenario[] {
+  const competitive = ctx.market === 'hot';
+  // hot markets punish slow, disciplined buyers more (you lose looks); soft markets reward patience
+  const firstLookOdds = competitive ? 0.45 : 0.75;
+
+  const brokerCall: Scenario = {
+    id: 'napkin-broker-call',
+    title: 'The broker calls',
+    entry: 'c1',
+    steps: {
+      c1: {
+        id: 'c1', speaker: 'Marcus Chen (broker)',
+        prompt: `"I've got two other groups looking at this one. If you're serious, I can get you an early look — but I need to know you can move."`,
+        options: [
+          { id: 'homework', label: 'Run the napkin properly first', detail: 'Do the five-minute math before you commit time.', tone: 'good', effects: { days: 1, rep: { broker: 1 } }, result: 'You tell Marcus you respect his time and will come back with a real read. Pros do their homework before they tour.' },
+          { id: 'fast', label: 'Drop everything and tour tomorrow', detail: 'Speed can win the look — or waste a week.', tone: 'warn', branches: [
+            { weight: firstLookOdds, result: 'Marcus puts you at the front of the line. The hustle paid off.', effects: { rep: { broker: 3 }, days: 1 } },
+            { weight: 1 - firstLookOdds, result: 'You burned two days on a deal that never penciled. Speed without a filter is just noise.', effects: { days: 2 } },
+          ] },
+          { id: 'proof', label: 'Send proof of funds + your buy box', detail: 'Show you are real without overcommitting.', tone: 'good', effects: { rep: { broker: 2 } }, result: 'Marcus now knows you can close. You move up his call list for the next one too.' },
+        ],
+      },
+    },
+  };
+
+  const rosyOM: Scenario = {
+    id: 'napkin-om-rosy',
+    title: 'The OM looks a little too good',
+    entry: 'v1',
+    steps: {
+      v1: {
+        id: 'v1', speaker: 'Your analyst',
+        prompt: 'The offering memo shows 96% occupancy and expenses well below comps. Take it at face value, or verify against the real T-12?',
+        options: [
+          { id: 'verify', label: 'Pull the actual T-12 and verify', detail: 'Costs a little time — reveals the truth.', tone: 'good', effects: { days: 2, set: { t12Verified: true } }, branches: [
+            { weight: 0.55, result: 'The numbers mostly hold. You underwrite with confidence.' },
+            { weight: 0.45, result: 'In-place rents are below the OM and expenses are understated. Good thing you checked — re-cut your assumptions down.', effects: { set: { omInflated: true } } },
+          ] },
+          { id: 'trust', label: 'Trust the OM and move fast', detail: 'Faster — but the broker works for the seller.', tone: 'bad', effects: { set: { trustedOM: true } }, result: 'You take the marketing numbers at face value. If they were optimistic, it will surface after you own it.' },
+        ],
+      },
+    },
+  };
+
+  return competitive ? [brokerCall, rosyOM] : [rosyOM, brokerCall];
+}
+
+/** LOI-stage color — competing buyers + seller intel — before the live negotiation. */
+export function buildLOIScenarios(ctx: EarlyCtx): Scenario[] {
+  const tight = ctx.market === 'hot';
+  const winOdds = tight ? 0.5 : 0.7;
+
+  const competing: Scenario = {
+    id: 'loi-competing-buyer',
+    title: 'Another buyer is circling',
+    entry: 'b1',
+    steps: {
+      b1: {
+        id: 'b1', speaker: 'Marcus Chen (broker)',
+        prompt: `"Full transparency — there's a second LOI coming in. The seller likes you, but money talks. How do you want to position?"`,
+        options: [
+          { id: 'sharpen', label: 'Sharpen terms (faster close, harder EMD)', detail: 'Win on certainty, not just price.', tone: 'good', effects: { set: { sharpenedTerms: true } }, branches: [
+            { weight: winOdds, result: 'The seller values certainty over the other bid. You keep pole position.', effects: { rep: { broker: 2 } } },
+            { weight: 1 - winOdds, result: 'It comes down to price anyway — but you are still in the conversation.', effects: { days: 1 } },
+          ] },
+          { id: 'hold', label: 'Hold your line — discipline over FOMO', detail: 'Refuse to bid against yourself.', tone: 'warn', branches: [
+            { weight: 0.6, result: 'The seller respects the discipline and stays at the table.', effects: { rep: { broker: 1 } } },
+            { weight: 0.4, result: 'You lose the early look, but you did not overpay for someone else’s upside.', effects: { days: 1 } },
+          ] },
+        ],
+      },
+    },
+  };
+
+  const intel: Scenario = {
+    id: 'loi-seller-intel',
+    title: 'Why is the seller selling?',
+    entry: 's1',
+    steps: {
+      s1: {
+        id: 's1', speaker: 'Marcus Chen (broker)',
+        prompt: `"Between us — the seller has a 1031 clock running and needs to close before quarter-end. That's worth something to you."`,
+        options: [
+          { id: 'use', label: 'Structure around their timeline', detail: 'Offer the certainty they need; ask for price in return.', tone: 'good', effects: { rep: { broker: 2 } }, result: 'You trade speed for basis. Understanding the seller’s motivation is half of every negotiation.' },
+          { id: 'ignore', label: 'Run standard terms', detail: 'Leave the leverage on the table.', tone: 'warn', result: 'You submit a vanilla LOI. Fine — but you passed on real negotiating leverage.' },
+        ],
+      },
+    },
+  };
+
+  return [intel, competing];
+}

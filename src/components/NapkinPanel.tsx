@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useApp } from '@/lib/store';
 import { InfoTip } from '@/components/InfoTip';
-import { scoreUW, getCoachMessage } from '@/lib/sim';
+import { StageEncounters } from '@/components/StageEncounters';
+import { scoreUW, getCoachMessage, buildNapkinScenarios } from '@/lib/sim';
 import {
   analyzeDeal,
   assetConfig,
@@ -41,8 +42,9 @@ export function NapkinPanel({
   deal: MarketDeal;
   onOpenConversation: () => void;
 }) {
-  const { buyBox, overridesOf, setOverride, resetOverrides, statusOf, setStatus, mode, isAdmin, commentsOf, filesOf, addFiles, coachingMode, updateDealDNA, addCoachMessage, sessionSeed } =
+  const { buyBox, overridesOf, setOverride, resetOverrides, statusOf, setStatus, mode, isAdmin, commentsOf, filesOf, addFiles, coachingMode, updateDealDNA, addCoachMessage, sessionSeed, game, difficulty } =
     useApp();
+  const napkinScenarios = useMemo(() => buildNapkinScenarios({ market: game.market, difficulty: difficulty ?? 'standard' }), [game.market, difficulty]);
   const ov = overridesOf(deal.id);
   const eff = { ...defaultOverrides(deal), ...ov };
   const r = analyzeDeal(deal, ov);
@@ -101,6 +103,13 @@ export function NapkinPanel({
           {commentsOf(deal.id).length > 0 && <span className="rounded-full bg-sky-600 px-1.5 text-xs font-semibold text-white tabular-nums">{commentsOf(deal.id).length}</span>}
         </button>
       </div>
+
+      {/* Live early-stage encounters (game mode) — broker calls, OM scrutiny … so sourcing isn't empty */}
+      {mode === 'game' && difficulty && napkinScenarios.length > 0 && (
+        <div className="px-4 pt-4">
+          <StageEncounters deal={deal} phase="napkin" builtins={napkinScenarios} icon="📞" />
+        </div>
+      )}
 
       {/* Overview */}
       <div id="sec-overview" className="scroll-mt-36 border-b border-slate-100 p-4">

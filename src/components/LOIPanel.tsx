@@ -7,7 +7,8 @@ import { InfoTip } from '@/components/InfoTip';
 import { downloadDoc, downloadPdf } from '@/lib/export/docExport';
 import { LOINegotiationModal } from '@/components/LOINegotiationModal';
 import { PSARedlineModal } from '@/components/PSARedlineModal';
-import { buildPSA, dealCounterparties, usd, type LOITerms, type MarketDeal, type PSAClause } from '@/lib/sim';
+import { StageEncounters } from '@/components/StageEncounters';
+import { buildLOIScenarios, buildPSA, dealCounterparties, usd, type LOITerms, type MarketDeal, type PSAClause } from '@/lib/sim';
 
 type CloseFrom = 'dd' | 'psa';
 type Financing = 'new' | 'assumption';
@@ -223,6 +224,7 @@ export function LOIPanel({ deal }: { deal: MarketDeal }) {
 
   const emdPct = f.emdAmount / Math.max(1, f.purchasePrice);
   const negTerms: LOITerms = { price: f.purchasePrice, emdPct, ddDays: f.ddDays, closeDays: f.closeDays, financingContingency: f.finContingencyEnabled };
+  const loiScenarios = useMemo(() => buildLOIScenarios({ market: game.market, difficulty: difficulty ?? 'standard' }), [game.market, difficulty]);
 
   function onLoiAccepted(finalTerms: LOITerms) {
     set({ purchasePrice: finalTerms.price, emdAmount: Math.round(finalTerms.emdPct * finalTerms.price), ddDays: finalTerms.ddDays, closeDays: finalTerms.closeDays, finContingencyEnabled: finalTerms.financingContingency });
@@ -374,6 +376,13 @@ export function LOIPanel({ deal }: { deal: MarketDeal }) {
           )}
         </div>
       </div>
+
+      {/* Game-mode: pre-offer color (competing buyers, seller intel) before the live negotiation */}
+      {mode === 'game' && difficulty && loiScenarios.length > 0 && (
+        <div className="px-4 pt-4">
+          <StageEncounters deal={deal} phase="loi" builtins={loiScenarios} icon="🤝" />
+        </div>
+      )}
 
       {/* Game-mode: submit the LOI into a live negotiation with the seller */}
       {mode === 'game' && (
