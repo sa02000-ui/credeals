@@ -132,6 +132,72 @@ export const AM_CARDS: AMCard[] = [
       { id: 'decline', label: 'Decline — keep operating', detail: 'Bet on more upside.', tone: 'warn', effects: {}, result: 'You hold for more NOI growth.' },
     ],
   },
+
+  // ── added: deeper texture across the decks ──
+  {
+    id: 'tenant-dispute', deck: 'operations', speaker: 'Property manager',
+    title: 'A tenant dispute escalates', prompt: 'A tenant is withholding rent over a habitability complaint and threatening to organize others. How do you handle it?',
+    weightBoost: { condition: { ddDepth: 'light' }, factor: 1.5 },
+    options: [
+      { id: 'fix-fast', label: 'Fix the issue fast + a goodwill credit', detail: 'Resolve it before it spreads.', tone: 'good', effects: { cash: -6_000 }, result: 'You make the repair and a small goodwill gesture. The complaint dies down and word spreads that management responds.' },
+      { id: 'stand-firm', label: 'Stand firm on the lease', detail: 'Enforce terms; risk escalation.', tone: 'warn', branches: [
+        { weight: 0.5, result: 'The tenant backs down once you document the lease terms.', effects: {} },
+        { weight: 0.5, result: 'It snowballs — a handful of tenants withhold and turnover ticks up.', effects: { occupancyDelta: -0.03, noiDelta: -12_000 } },
+      ] },
+    ],
+  },
+  {
+    id: 'lease-renewal-season', deck: 'operations', speaker: 'Leasing agent',
+    title: 'Renewal season is here', prompt: 'A wave of leases expires this quarter. Push renewal rents, or prioritize keeping the building full?',
+    options: [
+      { id: 'push', label: 'Push renewal rents 6–8%', detail: 'Capture rent growth; accept some move-outs.', tone: 'warn', branches: [
+        { weight: 0.6, result: 'Most renew at the higher rate — NOI steps up.', effects: { noiDelta: 30_000, occupancyDelta: -0.01 } },
+        { weight: 0.4, result: 'More move-outs than expected; turn costs bite this quarter.', effects: { noiDelta: 8_000, occupancyDelta: -0.04, cash: -15_000 } },
+      ] },
+      { id: 'retain', label: 'Offer flat renewals to retain', detail: 'Protect occupancy and cash flow.', tone: 'good', effects: { occupancyDelta: 0.02 }, result: 'Tenants renew happily. Occupancy is rock-solid even if you left a little rent on the table.' },
+    ],
+  },
+  {
+    id: 'renovation-delay', deck: 'operations', speaker: 'General contractor',
+    title: 'Renovations are behind schedule', prompt: 'Your value-add renovation is running two months late — permits plus a backordered materials package. Down units aren\'t earning.',
+    requires: { businessPlan: 'value-add' },
+    options: [
+      { id: 'expedite', label: 'Pay to expedite', detail: 'Overtime + air-freight the materials.', tone: 'warn', effects: { cash: -35_000, setFlag: 'reno-back-on-track' }, result: 'You buy back the schedule. Units come online and start earning the renovated premium.' },
+      { id: 'absorb', label: 'Absorb the delay', detail: 'Save the cash; eat the lost rent.', tone: 'bad', effects: { noiDelta: -20_000 }, result: 'Down units sit longer. The business plan slips a quarter and LPs notice the variance.' },
+    ],
+  },
+  {
+    id: 'loan-maturity-wall', deck: 'capital', speaker: 'Mortgage broker',
+    title: 'Loan maturity is approaching', prompt: 'Your bridge loan matures in 90 days and today\'s rates are well above your original coupon. How do you handle the refinance?',
+    weightBoost: { condition: { uwScore: 3 }, factor: 2 },
+    options: [
+      { id: 'refi-higher', label: 'Refinance at today\'s rate', detail: 'Certainty now; debt service jumps.', tone: 'warn', effects: { noiDelta: -28_000, setFlag: 'refinanced' }, result: 'You lock new permanent debt. Coverage is tighter, but the maturity risk is gone.' },
+      { id: 'extension', label: 'Buy a 12-month extension', detail: 'Pay a fee; bet rates ease.', tone: 'warn', branches: [
+        { weight: 0.5, result: 'Rates drift down and you refi cheaper next year — the fee paid off.', effects: { cash: -25_000 } },
+        { weight: 0.5, result: 'Rates stay high; you refinance anyway, having spent the extension fee.', effects: { cash: -25_000, noiDelta: -28_000 } },
+      ] },
+    ],
+  },
+  {
+    id: 'broker-repair-mission', deck: 'relationship', speaker: 'You',
+    title: 'Mend a strained broker relationship', prompt: 'A broker you retraded on a past deal has gone quiet and stopped sending you looks. Repair the relationship, or move on?',
+    options: [
+      { id: 'make-amends', label: 'Own it — lunch + a clean close next time', detail: 'Invest in the relationship.', tone: 'good', effects: { cash: -2_000, rep: { broker: 8 } }, result: 'You acknowledge the past retrade and recommit to clean execution. The broker starts sending you deals again.' },
+      { id: 'move-on', label: 'Move on to other brokers', detail: 'Don\'t chase it.', tone: 'warn', effects: {}, result: 'You let it go. The market is smaller than you think — but there are other shops.' },
+    ],
+  },
+  {
+    id: 'marketed-sale-process', deck: 'disposition', speaker: 'Investment sales broker',
+    title: 'Run a full marketed sale?', prompt: 'Cap rates have compressed and your business plan is largely complete. Run a full marketed process to maximize price, or shop it quietly off-market for speed and certainty?',
+    options: [
+      { id: 'full-process', label: 'Run a full marketed process', detail: 'Competitive tension lifts price — but it costs time and fees.', tone: 'good', branches: [
+        { weight: 0.65, result: 'Multiple bids push the price above your ask. Strong exit.', effects: { days: 45, cash: -30_000, performanceFactor: 1.05, setFlag: 'exit-now' } },
+        { weight: 0.35, result: 'A thinner buyer pool clears near your ask after a long process.', effects: { days: 60, cash: -30_000, setFlag: 'exit-now' } },
+      ] },
+      { id: 'off-market', label: 'Quiet off-market sale', detail: 'Faster and cheaper; likely a small discount.', tone: 'warn', effects: { days: 20, performanceFactor: 0.98, setFlag: 'exit-now' }, result: 'You trade a sliver of price for a clean, fast, low-fee exit.' },
+      { id: 'keep-holding', label: 'Keep holding', detail: 'Bet on more NOI growth.', tone: 'warn', effects: {}, result: 'You stay in for now and keep compounding NOI.' },
+    ],
+  },
 ];
 
 function eligible(card: AMCard, dna?: Partial<DealDNA>): boolean {

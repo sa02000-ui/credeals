@@ -4,6 +4,7 @@ import { seededRng, generateSessionSeed, jitterWeight, CURVEBALL_IDS } from '../
 import { INITIAL_PLAYER_MODEL, updatePlayerModel, shouldDeliverLesson, recordLesson } from '../playerModel';
 import { newRelationship, recordInteraction, applyBrokerRelToSellerTraits } from '../relationshipLedger';
 import { drawAMCards, AM_CARDS } from '../amCards';
+import { PSA_CLAUSE_LIBRARY } from '../encounters';
 import { pickPersona, dealCounterparties } from '../personas';
 import { buildNapkinScenarios, buildLOIScenarios, buildC2CScenarios, type Scenario } from '../scenarios';
 import type { DealDNA, SessionSeed } from '../gameTypes';
@@ -156,5 +157,32 @@ describe('scenario decks are structurally sound', () => {
   });
   it('C2C deck is valid', () => {
     buildC2CScenarios({ ...ctx, missedPSATraps: 2 }).forEach(assertValid);
+  });
+});
+
+describe('content additions (audit gaps)', () => {
+  it('includes the three added PSA clauses, all flagged sneaky', () => {
+    for (const id of ['survey-exception', 'force-majeure-broad', 'condition-precedent-seller']) {
+      const c = PSA_CLAUSE_LIBRARY.find((x) => x.id === id);
+      expect(c, `missing PSA clause ${id}`).toBeTruthy();
+      expect(c!.sneaky, `${id} should be sneaky`).toBe(true);
+      expect(c!.explain.length).toBeGreaterThan(20);
+    }
+  });
+  it('includes the added AM cards with well-formed options', () => {
+    const added = ['tenant-dispute', 'lease-renewal-season', 'renovation-delay', 'loan-maturity-wall', 'broker-repair-mission', 'marketed-sale-process'];
+    for (const id of added) {
+      const card = AM_CARDS.find((c) => c.id === id);
+      expect(card, `missing AM card ${id}`).toBeTruthy();
+      expect(card!.options.length).toBeGreaterThan(0);
+      // each option resolves to a direct outcome OR a set of weighted branches, never neither
+      for (const o of card!.options) {
+        expect(!!o.effects || (o.branches?.length ?? 0) > 0, `${id}.${o.id}: no effects and no branches`).toBe(true);
+      }
+    }
+  });
+  it('every AM card id is unique', () => {
+    const ids = AM_CARDS.map((c) => c.id);
+    expect(new Set(ids).size).toBe(ids.length);
   });
 });

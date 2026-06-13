@@ -5,6 +5,7 @@ import { useApp } from '@/lib/store';
 import { useDealLocal } from '@/lib/hooks/useDealLocal';
 import { getCoachMessage } from '@/lib/sim';
 import { InfoTip } from '@/components/InfoTip';
+import { DealDNAPanel } from '@/components/DealDNAPanel';
 import { NapkinPanel } from '@/components/NapkinPanel';
 import { DetailedUWPanel } from '@/components/DetailedUWPanel';
 import { LOIPanel } from '@/components/LOIPanel';
@@ -68,6 +69,7 @@ export function DealPhases({ deal, onOpenConversation, onPhaseChange }: { deal: 
   return (
     <div className="space-y-3">
       <DealPeoplePanel deal={deal} />
+      <DealDNAPanel deal={deal} />
 
       {/* Per-deal lifecycle nav — the authoritative stage tracker for this deal */}
       <div className="rounded-xl border border-indigo-200 bg-gradient-to-r from-indigo-50 to-white p-1.5">
