@@ -1,0 +1,21 @@
+Game design Phase 5: randomization wiring + live relationship ledger
+
+Persona jitter (Part 4, layer 2): pickPersona/dealCounterparties take a session-seed salt, so the SAME
+property draws a different seller/broker personality across playthroughs (stable within a session).
+Threaded through the LOI panel and the napkin counterparties card.
+
+Branch-weight jitter (Part 4, layer 3): ScenarioRunner now jitters each branch's odds +/-15% per session
+(seeded), so identical decisions diverge across runs.
+
+Relationships are now live: closing the LOI clean records a broker 'closed-clean'; a C2C retrade records
+'retraded' (broker standing drops, sellers stiffen next time); an 80+ closing records a 'closed-clean'
+with the seller. Deal DNA captures broker/seller personas, broker rep at LOI, PSA catch score, and
+closing score. New RelationshipLedger panel (TopBar, game mode): per-counterparty score, unlocked
+behaviors, and recent interactions.
+
+Tests: +3 (54 total) on persona jitter (stable per salt, varies across sessions).
+
+Game design phases 1-5 complete: onboarding+profiles, coach, UW scoring, LOI/PSA, C2C deck, AM quarterly
+cards, calibration review + player model, and the full randomization + relationship feedback loop.
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>

@@ -4,6 +4,7 @@ import { seededRng, generateSessionSeed, jitterWeight, CURVEBALL_IDS } from '../
 import { INITIAL_PLAYER_MODEL, updatePlayerModel, shouldDeliverLesson, recordLesson } from '../playerModel';
 import { newRelationship, recordInteraction, applyBrokerRelToSellerTraits } from '../relationshipLedger';
 import { drawAMCards, AM_CARDS } from '../amCards';
+import { pickPersona, dealCounterparties } from '../personas';
 import type { DealDNA, SessionSeed } from '../gameTypes';
 
 describe('scoreUW', () => {
@@ -111,5 +112,21 @@ describe('drawAMCards', () => {
   it('respects requires (value-add only cards hidden otherwise)', () => {
     const cards = drawAMCards({ quarter: 6, seed, dna: { businessPlan: 'light-touch' }, firedIds: [], count: 8 });
     expect(cards.some((c) => c.id === 'renovation-decision')).toBe(false);
+  });
+});
+
+describe('persona jitter (session seed)', () => {
+  it('is stable for the same deal + salt', () => {
+    expect(pickPersona('seller', 'deal-1', 42).id).toBe(pickPersona('seller', 'deal-1', 42).id);
+  });
+  it('the same deal can draw a different seller across sessions', () => {
+    const ids = new Set(Array.from({ length: 20 }, (_, salt) => pickPersona('seller', 'deal-1', salt).id));
+    expect(ids.size).toBeGreaterThan(1);
+  });
+  it('dealCounterparties threads the salt', () => {
+    const a = dealCounterparties('deal-x', 1);
+    const b = dealCounterparties('deal-x', 1);
+    expect(a.broker.id).toBe(b.broker.id);
+    expect(a.seller.id).toBe(b.seller.id);
   });
 });

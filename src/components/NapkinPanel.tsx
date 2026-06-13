@@ -41,7 +41,7 @@ export function NapkinPanel({
   deal: MarketDeal;
   onOpenConversation: () => void;
 }) {
-  const { buyBox, overridesOf, setOverride, resetOverrides, statusOf, setStatus, mode, isAdmin, commentsOf, filesOf, addFiles, coachingMode, updateDealDNA, addCoachMessage } =
+  const { buyBox, overridesOf, setOverride, resetOverrides, statusOf, setStatus, mode, isAdmin, commentsOf, filesOf, addFiles, coachingMode, updateDealDNA, addCoachMessage, sessionSeed } =
     useApp();
   const ov = overridesOf(deal.id);
   const eff = { ...defaultOverrides(deal), ...ov };
@@ -131,7 +131,7 @@ export function NapkinPanel({
             Outside buy box: {match.reasons.join(' · ')}
           </div>
         )}
-        {mode === 'game' && isAdmin && <Counterparties dealId={deal.id} />}
+        {mode === 'game' && isAdmin && <Counterparties dealId={deal.id} salt={sessionSeed?.value ?? 0} />}
       </div>
 
       {/* AI Enhanced Data */}
@@ -446,8 +446,8 @@ function UWBand({ uw }: { uw: ReturnType<typeof scoreUW> }) {
   );
 }
 
-function Counterparties({ dealId }: { dealId: string }) {
-  const { broker, seller } = dealCounterparties(dealId);
+function Counterparties({ dealId, salt }: { dealId: string; salt: number }) {
+  const { broker, seller } = dealCounterparties(dealId, salt);
   return (
     <div className="mt-3 rounded-lg border border-violet-200 bg-violet-50/50 p-3">
       <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-violet-700">

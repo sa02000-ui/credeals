@@ -101,7 +101,7 @@ export function buildC2CScenarios(ctx: DeckCtx): Scenario[] {
       a1: {
         id: 'a1', speaker: 'Lender', prompt: 'The appraisal is ~4% under your contract price, opening a financing gap. How do you respond?',
         options: [
-          { id: 'retrade', label: 'Retrade the seller', detail: 'Ask them to lower price to the appraisal.', tone: 'warn', effects: { rep: { broker: -3 }, days: 5 }, branches: [
+          { id: 'retrade', label: 'Retrade the seller', detail: 'Ask them to lower price to the appraisal.', tone: 'warn', effects: { rep: { broker: -3 }, days: 5, set: { retraded: true } }, branches: [
             { weight: retradeOdds, next: 'a_accept', result: 'The seller agrees to lower the price to the appraised value.' },
             { weight: 1 - retradeOdds, next: 'a_refuse', result: 'The seller refuses to retrade and calls your bluff.' },
           ] },

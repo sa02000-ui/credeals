@@ -10,6 +10,7 @@ import { ClosingScorecardModal } from '@/components/ClosingScorecardModal';
 import {
   buildC2CScenarios,
   C2C_DAY_BUDGET,
+  dealCounterparties,
   defaultDetailedInputs,
   resolveClosing,
   runDetailedUW,
@@ -24,7 +25,8 @@ interface Scenario { inputs: Parameters<typeof runDetailedUW>[0] }
 
 /** E3 — the Contract-to-Close decision deck (game mode): a sequence of branching scenarios → E4. */
 export function C2CDeck({ deal }: { deal: MarketDeal }) {
-  const { difficulty, game, applyGameOutcome, setStatus, statusOf, advanceDays } = useApp();
+  const { difficulty, game, applyGameOutcome, setStatus, statusOf, advanceDays, sessionSeed, updateRelationship, updateDealDNA } = useApp();
+  const { broker, seller } = dealCounterparties(deal.id, sessionSeed?.value ?? 0);
   const [psa] = useDealLocal<PSAState>('psa', deal.id, { done: false, caught: [], missed: [] });
   const [state, setState] = useDealLocal<DeckState>('c2cdeck-v2', deal.id, { idx: 0, flags: {}, days: 5 });
   const [scenarios] = useDealLocal<Scenario[]>('uw-scenarios-v2', deal.id, [{ inputs: defaultDetailedInputs(deal) }]);
@@ -62,6 +64,7 @@ export function C2CDeck({ deal }: { deal: MarketDeal }) {
 
   function onComplete(flags: Record<string, boolean>) {
     const merged = { ...state.flags, ...flags };
+    if (flags.retraded) updateRelationship(broker.id, 'retraded', deal.id, `Retraded on ${deal.name}`);
     if (flags.walk) {
       applyGameOutcome({ dealId: deal.id, repDelta: { broker: -3 }, event: { title: `Walked: ${deal.name}`, detail: 'You walked from the deal.', lesson: 'Walking protects capital. The discipline to pass is a skill.' } });
       setStatus(deal.id, 'archived');
@@ -129,6 +132,8 @@ export function C2CDeck({ deal }: { deal: MarketDeal }) {
           actual={{ leveredIRR: projected.leveredIRR * scorecard.performanceFactor, equityMultiple: projected.equityMultiple * scorecard.performanceFactor, avgCashOnCash: projected.avgCashOnCash * scorecard.performanceFactor }}
           onEnterAM={() => {
             applyGameOutcome({ dealId: deal.id, closed: true, repDelta: { lp: 2, broker: 2 }, event: { title: `Closed: ${deal.name}`, detail: 'Deal closed and added to the portfolio.', lesson: 'Onward — bigger deals unlock as your track record grows.' } });
+            updateDealDNA(deal.id, { closingScore: scorecard.closeScore, psaCatchScore: psa.caught.length + psa.missed.length > 0 ? psa.caught.length / (psa.caught.length + psa.missed.length) : 0.5 });
+            if (scorecard.closeScore >= 80) updateRelationship(seller.id, 'closed-clean', deal.id, `Clean close on ${deal.name}`);
             setStatus(deal.id, 'am');
             setScorecard(null);
           }}

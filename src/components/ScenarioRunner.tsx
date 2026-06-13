@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
-import { usd, type Scenario, type ScenarioEffects, type ScenarioOption } from '@/lib/sim';
+import { useMemo, useState } from 'react';
+import { useApp } from '@/lib/store';
+import { seededRng, usd, type Scenario, type ScenarioEffects, type ScenarioOption } from '@/lib/sim';
 
 interface Entry { speaker?: string; text: string; tone?: 'good' | 'warn' | 'bad' }
 
@@ -19,10 +20,14 @@ export function ScenarioRunner({
   onEffects: (e: ScenarioEffects) => void;
   onComplete: (flags: Record<string, boolean>) => void;
 }) {
+  const { sessionSeed } = useApp();
   const [stepId, setStepId] = useState(scenario.entry);
   const [log, setLog] = useState<Entry[]>([]);
   const [flags, setFlags] = useState<Record<string, boolean>>({});
   const [done, setDone] = useState(false);
+
+  // per-session RNG: jitters branch odds so identical decisions diverge across playthroughs (Part 4, layer 3)
+  const rng = useMemo(() => seededRng(((sessionSeed?.value ?? 1) ^ 0x9e3779b9) >>> 0), [sessionSeed?.value]);
 
   const step = scenario.steps[stepId];
 
@@ -40,7 +45,7 @@ export function ScenarioRunner({
 
     let nextId = opt.next;
     if (opt.branches && opt.branches.length) {
-      const b = pickBranch(opt.branches);
+      const b = pickBranch(opt.branches, rng);
       acc = applyAndMerge(b.effects, acc);
       if (b.result) lines.push({ text: b.result });
       nextId = b.next;
@@ -102,12 +107,14 @@ function optionEcho(opt: ScenarioOption): string {
   return `You chose: ${opt.label}.`;
 }
 
-function pickBranch<T extends { weight: number }>(branches: T[]): T {
-  const total = branches.reduce((a, b) => a + b.weight, 0);
-  let r = Math.random() * total;
-  for (const b of branches) {
-    r -= b.weight;
-    if (r <= 0) return b;
+function pickBranch<T extends { weight: number }>(branches: T[], rng: () => number): T {
+  // ±15% per-session jitter on each branch weight, then a seeded draw
+  const jittered = branches.map((b) => Math.max(0.01, b.weight * (0.85 + rng() * 0.3)));
+  const total = jittered.reduce((a, b) => a + b, 0);
+  let r = rng() * total;
+  for (let i = 0; i < branches.length; i++) {
+    r -= jittered[i];
+    if (r <= 0) return branches[i];
   }
   return branches[branches.length - 1];
 }

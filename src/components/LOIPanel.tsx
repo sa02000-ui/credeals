@@ -213,8 +213,8 @@ export function LOIPanel({ deal }: { deal: MarketDeal }) {
   const [edited, setEdited] = useState<string | null>(null);
   const text = edited ?? generated;
 
-  const { mode, difficulty, applyGameOutcome, setStatus, statusOf, addFiles, filesOf, advanceDays } = useApp();
-  const { seller } = dealCounterparties(deal.id);
+  const { mode, difficulty, game, applyGameOutcome, setStatus, statusOf, addFiles, filesOf, advanceDays, sessionSeed, updateRelationship, updateDealDNA } = useApp();
+  const { broker, seller } = dealCounterparties(deal.id, sessionSeed?.value ?? 0);
   const [celebrate, setCelebrate] = useState(false);
   const [negotiating, setNegotiating] = useState(false);
   const [psaClauses, setPsaClauses] = useState<PSAClause[] | null>(null);
@@ -229,6 +229,8 @@ export function LOIPanel({ deal }: { deal: MarketDeal }) {
     applyGameOutcome({ dealId: deal.id, pursued: true, repDelta: { broker: 3 }, cashDelta: -Math.round(finalTerms.emdPct * finalTerms.price), cashLabel: `Earnest money — ${deal.name}`, event: { title: `LOI accepted: ${deal.name}`, detail: `Terms agreed at ${usd(finalTerms.price)}.`, lesson: 'LOI accepted — next the seller’s counsel sends the PSA. Read it carefully.' } });
     setNegotiating(false);
     advanceDays(2); // papering the accepted LOI takes a couple of days
+    updateRelationship(broker.id, 'closed-clean', deal.id, `LOI accepted on ${deal.name}`);
+    updateDealDNA(deal.id, { brokerPersonaId: broker.id, sellerPersonaId: seller.id, brokerRelAtLOI: game.reputation.broker });
     setPsaClauses(buildPSA(difficulty ?? 'standard'));
   }
   function onLoiLost() {

@@ -76,13 +76,17 @@ function hash(s: string): number {
   return h;
 }
 
-/** Deterministically assign a persona of a kind to a deal (until real assignment exists). */
-export function pickPersona(kind: CounterpartyKind, seedKey: string): Persona {
+/**
+ * Assign a persona of a kind to a deal. Deterministic per (deal, session): the optional `salt` is the
+ * session seed, so the SAME property draws a different seller/broker personality across playthroughs
+ * (design doc Part 4, layer 2) while staying stable within a session.
+ */
+export function pickPersona(kind: CounterpartyKind, seedKey: string, salt = 0): Persona {
   const list = personasByKind(kind);
-  return list[hash(`${kind}:${seedKey}`) % list.length];
+  return list[hash(`${kind}:${seedKey}:${salt}`) % list.length];
 }
 
 /** Broker + seller for a deal (the two counterparties active at sourcing/napkin). */
-export function dealCounterparties(seedKey: string): { broker: Persona; seller: Persona } {
-  return { broker: pickPersona('broker', seedKey), seller: pickPersona('seller', seedKey) };
+export function dealCounterparties(seedKey: string, salt = 0): { broker: Persona; seller: Persona } {
+  return { broker: pickPersona('broker', seedKey, salt), seller: pickPersona('seller', seedKey, salt) };
 }
