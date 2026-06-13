@@ -44,7 +44,10 @@ export function NapkinPanel({
 }) {
   const { buyBox, overridesOf, setOverride, resetOverrides, statusOf, setStatus, mode, isAdmin, commentsOf, filesOf, addFiles, coachingMode, updateDealDNA, addCoachMessage, sessionSeed, game, difficulty } =
     useApp();
-  const napkinScenarios = useMemo(() => buildNapkinScenarios({ market: game.market, difficulty: difficulty ?? 'standard' }), [game.market, difficulty]);
+  const napkinScenarios = useMemo(
+    () => buildNapkinScenarios({ market: game.market, difficulty: difficulty ?? 'standard', seller: dealCounterparties(deal.id, sessionSeed?.value ?? 0).seller }),
+    [game.market, difficulty, deal.id, sessionSeed?.value],
+  );
   const ov = overridesOf(deal.id);
   const eff = { ...defaultOverrides(deal), ...ov };
   const r = analyzeDeal(deal, ov);

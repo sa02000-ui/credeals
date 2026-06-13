@@ -390,7 +390,7 @@ export function LOIPanel({ deal }: { deal: MarketDeal }) {
           <h3 className="mb-1 text-sm font-semibold">🎭 Submit &amp; negotiate</h3>
           <p className="mb-2 text-xs text-slate-600">Seller: <b>{seller.name}</b> — {seller.blurb} <span className="text-violet-700">💡 {seller.tells[0]}</span></p>
           <button onClick={() => setNegotiating(true)} className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-700">Submit LOI &amp; negotiate at {usd(f.purchasePrice, { compact: true })} →</button>
-          <p className="mt-1 text-[11px] text-slate-500">The seller will counter specific terms — respond fast to keep them at the table.</p>
+          <p className="mt-1 text-[11px] text-slate-500">You'll go back and forth over a few days — the seller counters specific terms; hold your line or concede what costs you least. A disciplined hold can win.</p>
         </div>
       )}
 

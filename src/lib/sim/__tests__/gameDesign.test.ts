@@ -182,6 +182,17 @@ describe('scenario decks are structurally sound', () => {
   it('C2C deck is valid', () => {
     buildC2CScenarios({ ...ctx, missedPSATraps: 2 }).forEach(assertValid);
   });
+  it('seller intel fires at napkin (not LOI) and varies by seller archetype', () => {
+    const mk = (id: string) => ({ id, kind: 'seller' as const, name: id, blurb: '', traits: {}, tells: ['—'] });
+    const distressed = buildNapkinScenarios({ ...ctx, seller: mk('seller-distressed') });
+    const institutional = buildNapkinScenarios({ ...ctx, seller: mk('seller-institutional') });
+    const pa = distressed.find((s) => s.id === 'napkin-seller-intel')!.steps.s1.prompt;
+    const pb = institutional.find((s) => s.id === 'napkin-seller-intel')!.steps.s1.prompt;
+    expect(pa).toBeTruthy();
+    expect(pa).not.toEqual(pb); // different archetypes ⇒ different broker intel
+    // the LOI stage no longer carries a seller-intel scenario
+    expect(buildLOIScenarios(ctx).some((s) => /seller-intel/.test(s.id))).toBe(false);
+  });
 });
 
 describe('content additions (audit gaps)', () => {

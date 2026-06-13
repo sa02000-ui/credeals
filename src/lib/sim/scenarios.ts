@@ -11,6 +11,7 @@
  */
 
 import type { Difficulty, MarketCondition, Reputation } from './gameEngine';
+import type { Persona } from './personas';
 
 export interface ScenarioEffects {
   cash?: number; // signed $ (negative = cost)
@@ -201,6 +202,55 @@ export function buildC2CScenarios(ctx: DeckCtx): Scenario[] {
 export interface EarlyCtx {
   market: MarketCondition;
   difficulty: Difficulty;
+  /** the deal's seller persona — drives archetype-specific broker intel so deals don't feel identical */
+  seller?: Persona;
+}
+
+/**
+ * Broker intel about WHY this seller is selling — varies by seller archetype so three different deals
+ * play differently (owner feedback: the "1031 seller" intel was identical across deals). Fires at the
+ * napkin/review stage (deal-open), where understanding motivation actually shapes how you underwrite
+ * and structure — not at LOI.
+ */
+function sellerIntel(seller?: Persona): Scenario {
+  const id = seller?.id ?? 'seller-tired';
+  const intel: Record<string, { prompt: string; play: { label: string; detail: string; result: string }; standard: string }> = {
+    'seller-distressed': {
+      prompt: `"Between us — the seller's got a 1031 clock running and needs to close before quarter-end, and they need the liquidity. Speed and certainty are worth real basis here."`,
+      play: { label: 'Structure around their timeline', detail: 'Offer the fast, certain close they need — ask for price in return.', result: 'You trade certainty for basis. Reading a motivated seller is half of every negotiation.' },
+      standard: 'You run a vanilla LOI and leave their urgency — your biggest lever — on the table.',
+    },
+    'seller-tired': {
+      prompt: `"This is a burned-out landlord — thirty years of 2am maintenance calls. They want a clean, drama-free exit more than top dollar. Heads up: the building's got deferred maintenance your DD will find."`,
+      play: { label: 'Lead with an easy, certain process', detail: 'Make it smooth; plan to negotiate credits when DD finds the capex.', result: 'You position as the low-drama buyer and keep powder dry for a DD retrade on real findings.' },
+      standard: 'You push hard on price up front. A tired seller may just take a smoother offer over yours.',
+    },
+    'seller-institutional': {
+      prompt: `"This is a fund disposition — best-and-final, they won't retrade, and they expect certainty. Firm price, hard dates. Perform or you lose your deposit."`,
+      play: { label: 'Bring certainty, not games', detail: 'Proof of funds, tight contingencies, hit their price if it pencils.', result: 'You present as an institutional-grade buyer. With this seller, certainty of close wins the deal — not a clever number.' },
+      standard: 'You submit a price-led, contingency-heavy offer. An institutional seller screens it straight out.',
+    },
+    'seller-unrealistic': {
+      prompt: `"Full transparency — the seller's anchored to a 2021 number the market left behind, and they're not truly motivated. This one might be a dead deal."`,
+      play: { label: 'Drop a disciplined low anchor and wait', detail: 'Underwrite to your number; let reality (and time) work on them.', result: "You plant a disciplined anchor and move on. Half of these never trade — but the ones that do, come back to the buyer who didn't chase." },
+      standard: 'You stretch toward their dream number to keep it alive. That is how buyers overpay for someone else’s nostalgia.',
+    },
+  };
+  const c = intel[id] ?? intel['seller-tired'];
+  return {
+    id: 'napkin-seller-intel',
+    title: 'Why is the seller selling?',
+    entry: 's1',
+    steps: {
+      s1: {
+        id: 's1', speaker: 'Marcus Chen (broker)', prompt: c.prompt,
+        options: [
+          { id: 'use', label: c.play.label, detail: c.play.detail, tone: 'good', effects: { rep: { broker: 2 }, set: { sellerMotivationRead: true } }, result: c.play.result },
+          { id: 'standard', label: 'Run standard terms', detail: 'Ignore the intel and play it straight.', tone: 'warn', result: c.standard },
+        ],
+      },
+    },
+  };
 }
 
 /** Sourcing / napkin-stage encounters — broker dynamics + underwriting discipline. */
@@ -248,7 +298,8 @@ export function buildNapkinScenarios(ctx: EarlyCtx): Scenario[] {
     },
   };
 
-  return competitive ? [brokerCall, rosyOM] : [rosyOM, brokerCall];
+  // seller intel leads (understanding motivation shapes how you underwrite), then broker + OM dynamics
+  return competitive ? [sellerIntel(ctx.seller), brokerCall, rosyOM] : [sellerIntel(ctx.seller), rosyOM, brokerCall];
 }
 
 /** LOI-stage color — competing buyers + seller intel — before the live negotiation. */
@@ -278,21 +329,7 @@ export function buildLOIScenarios(ctx: EarlyCtx): Scenario[] {
     },
   };
 
-  const intel: Scenario = {
-    id: 'loi-seller-intel',
-    title: 'Why is the seller selling?',
-    entry: 's1',
-    steps: {
-      s1: {
-        id: 's1', speaker: 'Marcus Chen (broker)',
-        prompt: `"Between us — the seller has a 1031 clock running and needs to close before quarter-end. That's worth something to you."`,
-        options: [
-          { id: 'use', label: 'Structure around their timeline', detail: 'Offer the certainty they need; ask for price in return.', tone: 'good', effects: { rep: { broker: 2 } }, result: 'You trade speed for basis. Understanding the seller’s motivation is half of every negotiation.' },
-          { id: 'ignore', label: 'Run standard terms', detail: 'Leave the leverage on the table.', tone: 'warn', result: 'You submit a vanilla LOI. Fine — but you passed on real negotiating leverage.' },
-        ],
-      },
-    },
-  };
-
-  return [intel, competing];
+  // Seller motivation/intel now fires at the napkin/review stage (sellerIntel) where it belongs — at
+  // LOI you're already positioning against competition, so this stage is just the competing-buyer beat.
+  return [competing];
 }
