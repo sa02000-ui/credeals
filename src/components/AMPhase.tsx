@@ -2,7 +2,9 @@
 
 import { useMemo, useState } from 'react';
 import { useApp } from '@/lib/store';
-import { drawAMCards, usd, type AMCard, type AMEffect, type AMOption, type MarketDeal } from '@/lib/sim';
+import { useDealLocal } from '@/lib/hooks/useDealLocal';
+import { CalibrationReview } from '@/components/CalibrationReview';
+import { computeExitOutcome, defaultDetailedInputs, drawAMCards, usd, type AMCard, type AMEffect, type AMOption, type DetailedUWInputs, type MarketDeal } from '@/lib/sim';
 
 /** E-AM — the quarterly Asset Management card phase (design doc Part 3). Game mode. */
 export function AMPhase({ deal }: { deal: MarketDeal }) {
@@ -21,7 +23,7 @@ export function AMPhase({ deal }: { deal: MarketDeal }) {
   }
 
   const archived = statusOf(deal.id) === 'archived';
-  if (archived) return <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">This deal has been exited. See the portfolio for the result.</div>;
+  if (archived) return <CalibrationReview deal={deal} />;
 
   return <AMQuarter deal={deal} am={am} est={est} dna={dealDNA[deal.id]} weakSpots={playerModel.weakSpots} seed={sessionSeed} applyAMEffect={applyAMEffect} advanceAMQuarter={advanceAMQuarter} setStatus={setStatus} />;
 }
@@ -37,6 +39,17 @@ function AMQuarter({ deal, am, est, dna, weakSpots, seed, applyAMEffect, advance
   advanceAMQuarter: ReturnType<typeof useApp>['advanceAMQuarter'];
   setStatus: ReturnType<typeof useApp>['setStatus'];
 }) {
+  const { game, finalizeExit } = useApp();
+  const [scenarios] = useDealLocal<{ inputs: DetailedUWInputs }[]>('uw-scenarios-v2', deal.id, [{ inputs: defaultDetailedInputs(deal) }]);
+
+  function doExit() {
+    if (!confirm('Exit (sell) this asset now? This ends the hold and scores the deal.')) return;
+    const inputs = scenarios[0]?.inputs ?? defaultDetailedInputs(deal);
+    const outcome = computeExitOutcome(inputs, am.noiCurrent, game.market);
+    finalizeExit(deal.id, outcome.projectedIRR, outcome.actualIRR);
+    setStatus(deal.id, 'archived');
+  }
+
   // cards for this quarter — computed once per quarter (prior-quarter decisions are "fired")
   const cards = useMemo(() => {
     if (!seed) return [];
@@ -99,7 +112,7 @@ function AMQuarter({ deal, am, est, dna, weakSpots, seed, applyAMEffect, advance
       <div className={`flex items-center justify-between gap-2 border-t border-teal-200 px-3 py-2 ${exitFlag ? 'bg-amber-50' : ''}`}>
         <span className="text-xs text-slate-600">{exitFlag ? '📨 You have an offer on the table — sell now?' : `Hold and operate, or exit when the numbers are right (Q${am.quarter}, NOI ${usd(am.noiCurrent, { compact: true })}).`}</span>
         <button
-          onClick={() => { if (confirm('Exit (sell) this asset now? This ends the hold.')) setStatus(deal.id, 'archived'); }}
+          onClick={doExit}
           className={`rounded-lg px-4 py-1.5 text-sm font-semibold ${exitFlag ? 'bg-amber-500 text-white hover:bg-amber-600' : 'border border-slate-300 text-slate-700 hover:bg-slate-100'}`}
         >
           Sell / exit →

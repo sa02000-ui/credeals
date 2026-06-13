@@ -606,6 +606,33 @@ export function runDetailedUW(i: DetailedUWInputs): DetailedUWResult {
   };
 }
 
+export interface ExitOutcome {
+  projectedNOI: number; actualNOI: number;
+  projectedExitCap: number; actualExitCap: number;
+  projectedSale: number; actualSale: number;
+  projectedIRR: number; actualIRR: number;
+  projectedEM: number; actualEM: number;
+}
+
+/**
+ * Estimate the realized exit vs. the underwritten exit (design doc Part 3). Realized NOI comes from
+ * how the player actually operated; the exit cap moves with the market at sale time. Returns drift
+ * with the value ratio — an indicative scorecard for the calibration review, not a precise re-IRR.
+ */
+export function computeExitOutcome(inputs: DetailedUWInputs, actualNOI: number, market: 'hot' | 'balanced' | 'tough'): ExitOutcome {
+  const r = runDetailedUW(inputs);
+  const projectedNOI = r.exitNOI;
+  const projectedExitCap = inputs.exitCapRate;
+  const projectedSale = r.salePrice;
+  const capAdj = market === 'hot' ? -0.005 : market === 'tough' ? 0.01 : 0;
+  const actualExitCap = Math.max(0.03, projectedExitCap + capAdj);
+  const actualSale = actualNOI > 0 && actualExitCap > 0 ? actualNOI / actualExitCap : projectedSale;
+  const valueRatio = projectedSale > 0 ? actualSale / projectedSale : 1;
+  const actualEM = Math.max(0, r.equityMultiple * valueRatio);
+  const actualIRR = Math.max(-0.5, Math.min(1, r.leveredIRR + (valueRatio - 1) * 0.5));
+  return { projectedNOI, actualNOI, projectedExitCap, actualExitCap, projectedSale, actualSale, projectedIRR: r.leveredIRR, actualIRR, projectedEM: r.equityMultiple, actualEM };
+}
+
 let _id = 0;
 const lid = () => `li${Date.now().toString(36)}${(_id++).toString(36)}`;
 export function newLineId(): string {

@@ -14,6 +14,7 @@ import {
   DIFFICULTY_INFO,
   PROFILE_CONFIGS,
   INITIAL_PLAYER_MODEL,
+  updatePlayerModel,
   generateSessionSeed,
   newRelationship,
   recordInteraction,
@@ -148,6 +149,8 @@ interface AppContextValue extends AppState {
   initAMState: (dealId: string, occupancy: number, noi: number) => void;
   applyAMEffect: (dealId: string, effect: AMEffect, quarter: number, cardId: string, optionId: string) => void;
   advanceAMQuarter: (dealId: string, distribution: number) => void;
+  /** finalize a deal at exit: record projected/actual returns + roll the result into the player model (once) */
+  finalizeExit: (dealId: string, projectedIRR: number, actualIRR: number) => void;
   setMode: (m: SimMode) => void;
   setAdmin: (v: boolean) => void;
   setMarket: (m: MarketCondition) => void;
@@ -459,6 +462,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           if (!am) return s;
           const next: AMRunState = { ...am, quarter: am.quarter + 1, cashFlowHistory: [...am.cashFlowHistory, { quarter: am.quarter, amount: distribution }] };
           return { ...s, day: s.day + 90, amStates: { ...s.amStates, [dealId]: next } };
+        }),
+      finalizeExit: (dealId, projectedIRR, actualIRR) =>
+        setState((s) => {
+          const prev = s.dealDNA[dealId];
+          if (prev?.exitDay != null) return s; // already finalized — don't double-count
+          const base: DealDNA = prev ?? {
+            dealId, uwScore: 2, brokerRelAtLOI: 50, sellerPersonaId: '', brokerPersonaId: '', psaCatchScore: 0,
+            ddDepth: 'moderate', lenderChosen: '', raiseStructure: 'solo', businessPlan: 'value-add', closingScore: 0, amDecisions: [],
+          };
+          const dna: DealDNA = { ...base, projectedIRR, actualIRR, exitDay: s.day };
+          return { ...s, dealDNA: { ...s.dealDNA, [dealId]: dna }, playerModel: updatePlayerModel(s.playerModel, dna) };
         }),
       applyGameOutcome: (o) =>
         setState((s) => {

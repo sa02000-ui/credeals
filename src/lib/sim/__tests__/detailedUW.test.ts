@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { runDetailedUW, defaultDetailedInputs, irr, lineAmount, type DetailedUWInputs } from '../detailedUW';
+import { runDetailedUW, defaultDetailedInputs, computeExitOutcome, irr, lineAmount, type DetailedUWInputs } from '../detailedUW';
 
 const DEAL = {
   askPrice: 10_000_000,
@@ -129,5 +129,22 @@ describe('runDetailedUW — loan maturity alert', () => {
   it('does not flag when a refinance covers it', () => {
     const r = runDetailedUW({ ...base(), loanTermYears: 3, holdYears: 5, refiEnabled: true });
     expect(r.seniorMaturesEarly).toBe(false);
+  });
+});
+
+describe('computeExitOutcome', () => {
+  it('beats projection when realized NOI exceeds the underwritten exit NOI', () => {
+    const inp = base();
+    const projected = runDetailedUW(inp);
+    const out = computeExitOutcome(inp, projected.exitNOI * 1.2, 'balanced');
+    expect(out.actualIRR).toBeGreaterThan(out.projectedIRR);
+    expect(out.actualSale).toBeGreaterThan(out.projectedSale);
+  });
+  it('misses projection when realized NOI is below + the market turns tough', () => {
+    const inp = base();
+    const projected = runDetailedUW(inp);
+    const out = computeExitOutcome(inp, projected.exitNOI * 0.85, 'tough');
+    expect(out.actualIRR).toBeLessThan(out.projectedIRR);
+    expect(out.actualExitCap).toBeGreaterThan(out.projectedExitCap); // tough market widens caps
   });
 });
