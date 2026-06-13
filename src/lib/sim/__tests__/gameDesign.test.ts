@@ -5,6 +5,8 @@ import { INITIAL_PLAYER_MODEL, updatePlayerModel, shouldDeliverLesson, recordLes
 import { newRelationship, recordInteraction, applyBrokerRelToSellerTraits } from '../relationshipLedger';
 import { drawAMCards, AM_CARDS } from '../amCards';
 import { PSA_CLAUSE_LIBRARY } from '../encounters';
+import { buildPipeline } from '../dealPipeline';
+import { SEED_DEALS } from '../seed';
 import { pickPersona, dealCounterparties } from '../personas';
 import { buildNapkinScenarios, buildLOIScenarios, buildC2CScenarios, type Scenario } from '../scenarios';
 import type { DealDNA, SessionSeed } from '../gameTypes';
@@ -114,6 +116,28 @@ describe('drawAMCards', () => {
   it('respects requires (value-add only cards hidden otherwise)', () => {
     const cards = drawAMCards({ quarter: 6, seed, dna: { businessPlan: 'light-touch' }, firedIds: [], count: 8 });
     expect(cards.some((c) => c.id === 'renovation-decision')).toBe(false);
+  });
+});
+
+describe('deal pipeline (day-driven flow)', () => {
+  const seed: SessionSeed = { value: 4242, dealPoolIndices: [], curveballDeck: [], curveballQuarters: [], marketShiftDay: 100, marketShiftTo: 'tough' };
+  it('schedules every deal with a channel, arrival >= 2, and a later expiry', () => {
+    const pipe = buildPipeline(SEED_DEALS, seed);
+    expect(pipe).toHaveLength(SEED_DEALS.length);
+    for (const e of pipe) {
+      expect(['website-match', 'broker-on-market', 'broker-off-market']).toContain(e.channel);
+      expect(e.arrivalDay).toBeGreaterThanOrEqual(2);
+      expect(e.expiresOnDay).toBeGreaterThan(e.arrivalDay);
+    }
+  });
+  it('is deterministic for the same seed', () => {
+    const a = buildPipeline(SEED_DEALS, seed).map((e) => `${e.deal.id}:${e.channel}:${e.arrivalDay}`);
+    const b = buildPipeline(SEED_DEALS, seed).map((e) => `${e.deal.id}:${e.channel}:${e.arrivalDay}`);
+    expect(a).toEqual(b);
+  });
+  it('arrivals are spread across multiple days (not all at once)', () => {
+    const days = new Set(buildPipeline(SEED_DEALS, seed).map((e) => e.arrivalDay));
+    expect(days.size).toBeGreaterThan(1);
   });
 });
 

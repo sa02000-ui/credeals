@@ -6,6 +6,8 @@ import {
   STAGES,
   analyzeDeal,
   matchBuyBox,
+  CHANNEL_SHORT,
+  CHANNEL_LABEL,
   pct,
   usd,
   type DealStage,
@@ -33,7 +35,7 @@ export function DealFeed({
   onAddDeal: () => void;
   onOpenConversation: (id: string) => void;
 }) {
-  const { deals, statusOf } = useApp();
+  const { deals, statusOf, dealsIncoming, mode } = useApp();
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({ archived: true });
 
   const byStage = (stage: DealStage) => deals.filter((d) => statusOf(d.id) === stage);
@@ -68,7 +70,13 @@ export function DealFeed({
               </button>
               {!isCollapsed &&
                 (items.length === 0 ? (
-                  <div className="px-4 py-2 text-xs text-slate-400">—</div>
+                  mode === 'game' && stage.id === 'new' && dealsIncoming > 0 ? (
+                    <div className="px-4 py-2.5 text-xs text-slate-500">
+                      🔍 Your network is working — <span className="font-semibold text-slate-700">{dealsIncoming} deal{dealsIncoming === 1 ? '' : 's'}</span> expected over the next days. Brokers call and listings drop as time passes; let the clock run.
+                    </div>
+                  ) : (
+                    <div className="px-4 py-2 text-xs text-slate-400">—</div>
+                  )
                 ) : (
                   <ul>
                     {items.map((deal) => (
@@ -101,10 +109,13 @@ function DealRow({
   onSelect: () => void;
   onOpenConversation: () => void;
 }) {
-  const { buyBox, overridesOf, commentsOf } = useApp();
+  const { buyBox, overridesOf, commentsOf, day, mode, statusOf } = useApp();
   const match = matchBuyBox(deal, buyBox);
   const r = analyzeDeal(deal, overridesOf(deal.id));
   const comments = commentsOf(deal.id);
+  // sourcing-stage urgency: how many days before this un-pursued deal trades away
+  const daysLeft = deal.expiresOnDay != null ? deal.expiresOnDay - day : null;
+  const showFlow = mode === 'game' && deal.channel && statusOf(deal.id) === 'new';
 
   return (
     <li>
@@ -150,6 +161,19 @@ function DealRow({
           </div>
         </div>
         <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+          {showFlow && deal.channel && (
+            <span title={CHANNEL_LABEL[deal.channel]} className="rounded border border-violet-200 bg-violet-50 px-1.5 py-0.5 text-[10px] font-semibold text-violet-700">
+              {CHANNEL_SHORT[deal.channel]}
+            </span>
+          )}
+          {showFlow && daysLeft != null && (
+            <span
+              title="Days before this deal trades away if you don't pursue it"
+              className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold ${daysLeft <= 4 ? 'border-red-200 bg-red-50 text-red-700' : daysLeft <= 9 ? 'border-amber-200 bg-amber-50 text-amber-700' : 'border-slate-200 bg-slate-50 text-slate-500'}`}
+            >
+              ⏳ {Math.max(0, daysLeft)}d left
+            </span>
+          )}
           <span className="rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-medium text-slate-600">
             Existing MF
           </span>

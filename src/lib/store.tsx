@@ -9,6 +9,8 @@ import {
   DEFAULT_BUY_BOX,
   INITIAL_GAME,
   SEED_DEALS,
+  buildPipeline,
+  arrivalNote,
   applyRep,
   treasuryBalance,
   DIFFICULTY_INFO,
@@ -104,6 +106,10 @@ interface AppState {
   coachMessages: CoachMessage[];
   /** persistent notification inbox — every fired game event lands here (game-flow redesign) */
   notifications: GameNotification[];
+  /** game-mode deals that expired un-pursued and traded away (hidden from the feed) */
+  tradedAwayDealIds: string[];
+  /** highest simulated day already processed for deal arrivals/expiries (so reloads don't re-fire) */
+  dealFlowDay: number;
 }
 
 const CARRY_PER_DAY = 250; // light daily carrying cost so time costs money
@@ -136,10 +142,14 @@ const INITIAL: AppState = {
   relationships: {},
   coachMessages: [],
   notifications: [],
+  tradedAwayDealIds: [],
+  dealFlowDay: 1,
 };
 
 interface AppContextValue extends AppState {
   deals: MarketDeal[];
+  /** game-mode deals scheduled to arrive on a later day (drives the "deals incoming" hint) */
+  dealsIncoming: number;
   cashBalance: number;
   /** admin feature flag: is game mode visible to users at all */
   gameEnabled: boolean;
@@ -284,6 +294,36 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return () => clearInterval(t);
   }, [hydrated, state.mode, state.difficulty, state.clockPaused, state.clockMinutesPerDay]);
 
+  // Deal flow (Phase B): surface deals that arrive and trade away the ones ignored past their fuse.
+  // The arrival/expiry schedule is a pure function of the session seed; we persist the highest day
+  // already processed (dealFlowDay) so reloads never re-fire, and we process the whole day RANGE since
+  // last time so a clock jump (advanceDays) doesn't skip a wave. A pursued deal (past 'new') never expires.
+  useEffect(() => {
+    if (!hydrated || state.mode !== 'game' || !state.difficulty || !state.sessionSeed) return;
+    const configured = isSupabaseConfigured();
+    const pool = (configured ? dbDeals ?? [] : [...state.customDeals, ...SEED_DEALS]).filter((d) => (d.simMode ?? 'game') === 'game');
+    if (pool.length === 0) return; // deals not loaded yet — wait (don't advance dealFlowDay)
+    const fromDay = state.dealFlowDay;
+    const toDay = state.day;
+    if (toDay <= fromDay) return;
+    const status = (id: string) => (configured ? dbStages[id] ?? 'new' : state.dealStates[id]?.status ?? 'new');
+    const pipe = buildPipeline(pool, state.sessionSeed);
+    const arrived = pipe.filter((e) => e.arrivalDay > fromDay && e.arrivalDay <= toDay);
+    const expired = pipe.filter((e) => e.expiresOnDay > fromDay && e.expiresOnDay <= toDay && status(e.deal.id) === 'new' && !state.tradedAwayDealIds.includes(e.deal.id));
+    setState((s) => {
+      if (s.dealFlowDay >= toDay) return s; // already processed (guards double-invoke)
+      const notes: GameNotification[] = [];
+      for (const e of arrived) {
+        const n = arrivalNote(e);
+        notes.push({ id: `nt-arr-${e.deal.id}-${e.arrivalDay}`, ts: Date.now(), day: e.arrivalDay, kind: 'deal', title: n.title, body: n.body, read: false, dealId: e.deal.id });
+      }
+      for (const e of expired) {
+        notes.push({ id: `nt-exp-${e.deal.id}-${e.expiresOnDay}`, ts: Date.now(), day: e.expiresOnDay, kind: 'deal', title: 'A deal traded away', body: `${e.deal.name} went under contract with another buyer — you didn't act in time.${e.channel === 'broker-off-market' ? ' Off-market looks move fastest.' : ''}`, read: false });
+      }
+      return { ...s, dealFlowDay: toDay, tradedAwayDealIds: [...s.tradedAwayDealIds, ...expired.map((e) => e.deal.id)], notifications: [...s.notifications, ...notes].slice(-60) };
+    });
+  }, [state.day, state.dealFlowDay, hydrated, state.mode, state.difficulty, dbDeals]);
+
   // When Supabase is configured: load the signed-in user's profile (is_admin) + their deals.
   // Session/user identity comes from the cookie (see token.ts) to avoid the supabase-js
   // getSession() init hang; queries go through the data client (RLS via the cookie JWT).
@@ -324,9 +364,31 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const configured = isSupabaseConfigured();
     // Game and Real are separate worlds: each mode only sees its own deals (deals.sim_mode).
     const allDeals = configured ? (dbDeals ?? []) : [...state.customDeals, ...SEED_DEALS];
-    const deals = allDeals.filter((d) => (d.simMode ?? 'game') === state.mode);
     const statusOf = (id: string): DealStatus =>
       configured ? (dbStages[id] ?? 'new') : (state.dealStates[id]?.status ?? 'new');
+    let deals = allDeals.filter((d) => (d.simMode ?? 'game') === state.mode);
+    let dealsIncoming = 0; // game-mode deals scheduled to arrive on a later day (not yet shown)
+    // Game mode: deals arrive over days through channels and expire if ignored (Phase B). A pursued
+    // deal (past 'new') is always visible — you never lose something you're actively working.
+    if (state.mode === 'game' && state.sessionSeed) {
+      const pipe = buildPipeline(deals, state.sessionSeed);
+      const byId = new Map(pipe.map((e) => [e.deal.id, e]));
+      dealsIncoming = pipe.filter((e) => e.arrivalDay > state.day && statusOf(e.deal.id) === 'new' && !state.tradedAwayDealIds.includes(e.deal.id)).length;
+      deals = deals
+        .filter((d) => {
+          const e = byId.get(d.id);
+          if (!e) return true;
+          const pursued = statusOf(d.id) !== 'new';
+          if (pursued) return true;
+          if (e.arrivalDay > state.day) return false; // hasn't shown up yet
+          if (state.tradedAwayDealIds.includes(d.id)) return false; // traded away
+          return true;
+        })
+        .map((d) => {
+          const e = byId.get(d.id);
+          return e ? { ...d, channel: e.channel, arrivalDay: e.arrivalDay, expiresOnDay: e.expiresOnDay } : d;
+        });
+    }
 
     function chargePursuit(dealId: string, status: DealStatus, prev: DealStatus) {
       // Passing napkin → detailed UW commits real third-party/diligence spend (game mode).
@@ -376,6 +438,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return {
       ...state,
       deals,
+      dealsIncoming,
       cashBalance: treasuryBalance(state.treasury) - state.carryPerDay * Math.max(0, state.day - 1),
       setMode: (mode) => setState((s) => ({ ...s, mode })),
       setMarket: (m) => setState((s) => ({ ...s, game: { ...s.game, market: m } })),

@@ -121,7 +121,18 @@ export interface MarketDeal {
   custom?: boolean;
   /** which world this deal lives in (DB-backed deals) */
   simMode?: SimMode;
+
+  // ── day-driven deal flow (game mode; derived from the session seed, set by the store) ──
+  /** how this deal reached you */
+  channel?: DealChannel;
+  /** simulated day this deal showed up in your feed */
+  arrivalDay?: number;
+  /** simulated day an un-pursued deal trades away to someone else */
+  expiresOnDay?: number;
 }
+
+/** How a deal reached the player. Off-market = better economics, shorter fuse → rewards relationships. */
+export type DealChannel = 'website-match' | 'broker-on-market' | 'broker-off-market';
 
 /** The player's acquisition criteria. */
 export interface BuyBox {

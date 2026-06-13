@@ -52,7 +52,8 @@ export function NotificationInbox() {
     setToasts([]);
   }
 
-  const recent = [...notifications].reverse();
+  // dedupe by id (deterministic ids + persistence could leave stale duplicates) then newest-first
+  const recent = [...new Map(notifications.map((n) => [n.id, n])).values()].reverse();
 
   return (
     <>

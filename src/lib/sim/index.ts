@@ -16,3 +16,4 @@ export * from './playerModel';
 export * from './relationshipLedger';
 export * from './coachMessages';
 export * from './amCards';
+export * from './dealPipeline';
