@@ -6,6 +6,7 @@ import { useApp } from '@/lib/store';
 import { treasuryBalance, usd } from '@/lib/sim';
 import { AuthStatus } from '@/components/AuthStatus';
 import { RelationshipLedger } from '@/components/RelationshipLedger';
+import { NotificationInbox } from '@/components/NotificationInbox';
 
 export function TopBar() {
   const { mode, setMode, cashBalance, day, resetAll, isAdmin, difficulty, clockPaused, setClockPaused, clockMinutesPerDay, setClockSpeed, treasury, gameEnabled } = useApp();
@@ -140,6 +141,7 @@ export function TopBar() {
             </button>
           )}
 
+          <NotificationInbox />
           <RelationshipLedger />
           <AuthStatus />
         </div>

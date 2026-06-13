@@ -41,7 +41,7 @@ export function CoachPanel() {
       {!open && (
         <button
           onClick={() => setOpen(true)}
-          className="fixed bottom-4 right-4 z-40 flex items-center gap-2 rounded-full border border-indigo-300 bg-white px-4 py-2.5 text-sm font-semibold text-indigo-700 shadow-xl hover:bg-indigo-50"
+          className={`fixed bottom-4 right-4 z-40 flex items-center gap-2 rounded-full border bg-white px-4 py-2.5 text-sm font-semibold text-indigo-700 shadow-xl hover:bg-indigo-50 ${unread > 0 ? 'animate-pulse border-amber-400 ring-2 ring-amber-300' : 'border-indigo-300'}`}
         >
           <span className="grid h-7 w-7 place-items-center rounded-full bg-indigo-600 text-white">R</span>
           Ask Ray

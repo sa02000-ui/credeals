@@ -27,6 +27,7 @@ import {
   type AMRunState,
   type AMEffect,
   type CoachMessage,
+  type GameNotification,
   type CounterpartyRelationship,
   type InteractionType,
   type GameState,
@@ -101,6 +102,8 @@ interface AppState {
   amStates: Record<string, AMRunState>;
   relationships: Record<string, CounterpartyRelationship>;
   coachMessages: CoachMessage[];
+  /** persistent notification inbox — every fired game event lands here (game-flow redesign) */
+  notifications: GameNotification[];
 }
 
 const CARRY_PER_DAY = 250; // light daily carrying cost so time costs money
@@ -132,6 +135,7 @@ const INITIAL: AppState = {
   amStates: {},
   relationships: {},
   coachMessages: [],
+  notifications: [],
 };
 
 interface AppContextValue extends AppState {
@@ -148,6 +152,11 @@ interface AppContextValue extends AppState {
   updateDealDNA: (dealId: string, patch: Partial<DealDNA>) => void;
   updateRelationship: (personaId: string, type: InteractionType, dealId: string, note: string) => void;
   addCoachMessage: (message: Omit<CoachMessage, 'id' | 'ts'>) => void;
+  /** push a notification into the inbox (also surfaced as a transient toast) */
+  pushNotification: (n: Omit<GameNotification, 'id' | 'ts' | 'read' | 'day'> & { day?: number }) => void;
+  markNotificationsRead: () => void;
+  dismissNotification: (id: string) => void;
+  clearNotifications: () => void;
   initAMState: (dealId: string, occupancy: number, noi: number) => void;
   applyAMEffect: (dealId: string, effect: AMEffect, quarter: number, cardId: string, optionId: string) => void;
   advanceAMQuarter: (dealId: string, distribution: number) => void;
@@ -265,7 +274,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           const seed = s.sessionSeed;
           if (seed && day >= seed.marketShiftDay && s.game.market !== seed.marketShiftTo) {
             const note = { id: `mkt-${Date.now()}`, ts: Date.now(), title: `Market shifted to ${seed.marketShiftTo}`, detail: `The capital markets turned ${seed.marketShiftTo} around day ${day}. Cap rates, rents, and equity availability move with it.`, lesson: 'Markets move under you mid-hold — the same financing call can be right in one cycle and wrong in the next.' };
-            return { ...s, day, game: { ...s.game, market: seed.marketShiftTo, log: [note, ...s.game.log].slice(0, 50) } };
+            const notif: GameNotification = { id: `nt-${note.id}`, ts: note.ts, day, kind: 'market', title: note.title, body: note.detail, read: false };
+            return { ...s, day, game: { ...s.game, market: seed.marketShiftTo, log: [note, ...s.game.log].slice(0, 50) }, notifications: [...s.notifications, notif].slice(-60) };
           }
           return { ...s, day };
         }),
@@ -415,10 +425,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           return { ...s, relationships: { ...s.relationships, [personaId]: recordInteraction(rel, type, dealId, note, s.day) } };
         }),
       addCoachMessage: (message) =>
+        setState((s) => {
+          const ts = Date.now();
+          const cm: CoachMessage = { ...message, id: `cm-${ts}-${Math.random().toString(36).slice(2, 6)}`, ts };
+          const coachMessages = [...s.coachMessages, cm].slice(-100);
+          // Ray speaking → surface it actively (toast + inbox); the player's own messages don't notify.
+          if (message.from !== 'coach') return { ...s, coachMessages };
+          const note: GameNotification = { id: `nt-${cm.id}`, ts, day: s.day, kind: 'coach', title: 'Ray', body: message.text, read: false, dealId: message.dealId };
+          return { ...s, coachMessages, notifications: [...s.notifications, note].slice(-60) };
+        }),
+      pushNotification: (n) =>
         setState((s) => ({
           ...s,
-          coachMessages: [...s.coachMessages, { ...message, id: `cm-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, ts: Date.now() }].slice(-100),
+          notifications: [...s.notifications, { ...n, id: `nt-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, ts: Date.now(), read: false, day: n.day ?? s.day }].slice(-60),
         })),
+      markNotificationsRead: () =>
+        setState((s) => (s.notifications.some((x) => !x.read) ? { ...s, notifications: s.notifications.map((x) => ({ ...x, read: true })) } : s)),
+      dismissNotification: (id) => setState((s) => ({ ...s, notifications: s.notifications.filter((x) => x.id !== id) })),
+      clearNotifications: () => setState((s) => ({ ...s, notifications: [] })),
       initAMState: (dealId, occupancy, noi) =>
         setState((s) =>
           s.amStates[dealId]

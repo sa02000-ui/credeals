@@ -143,6 +143,33 @@ export interface CoachMessage {
   trigger?: string;
 }
 
+// ── Notification inbox + day-driven event engine (game-flow redesign) ──
+export type GameNotificationKind = 'coach' | 'market' | 'deal' | 'loi' | 'idle' | 'opportunity' | 'system';
+
+/** A persistent inbox item. Every fired event lands here so nothing is ever lost; transient toasts
+ *  are just the freshest of these surfaced briefly. */
+export interface GameNotification {
+  id: string;
+  ts: number;
+  day: number;
+  kind: GameNotificationKind;
+  title: string;
+  body: string;
+  read: boolean;
+  /** optional deep-link: clicking the item selects this deal */
+  dealId?: string;
+}
+
+/** An event scheduled against the simulated clock; fires (→ a notification, deal, etc.) on fireOnDay.
+ *  Producers (deal arrivals, LOI counters, idle nudges, broker callbacks) are wired in later phases. */
+export type GameEventType = 'deal-arrival' | 'loi-response' | 'coach-nudge' | 'idle-warning' | 'opportunity' | 'deal-callback';
+export interface ScheduledEvent {
+  id: string;
+  fireOnDay: number;
+  type: GameEventType;
+  payload?: Record<string, unknown>;
+}
+
 // ── Counterparty relationship ledger ──
 export type InteractionType = 'closed-clean' | 'retraded' | 'lowballed' | 'slow-response' | 'full-dd' | 'ghosted' | 'referral-sent';
 

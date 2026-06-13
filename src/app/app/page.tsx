@@ -81,6 +81,15 @@ export default function Home() {
           </button>
         ) : (
           <div className="space-y-4">
+            {selected && wsPhase === 'detailed' && (
+              <button
+                onClick={() => setSidebarPinned(false)}
+                title="Hide the buy box & deal feed for more underwriting room"
+                className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[11px] font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+              >
+                ◂ Hide for more UW room
+              </button>
+            )}
             <div id="nav-buybox" className="scroll-mt-32">
               <BuyBoxPanel />
             </div>
