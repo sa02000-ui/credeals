@@ -42,7 +42,7 @@ export function InfoTip({
           e.stopPropagation();
           setOpen((v) => !v);
         }}
-        className="grid h-3.5 w-3.5 place-items-center rounded-full border border-slate-300 text-[9px] font-bold leading-none text-slate-400 hover:border-sky-400 hover:text-sky-600"
+        className="grid h-4 w-4 place-items-center rounded-full border border-sky-600 bg-sky-600 text-[10px] font-bold leading-none text-white hover:bg-sky-700"
       >
         i
       </button>

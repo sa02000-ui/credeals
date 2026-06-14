@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useApp } from '@/lib/store';
 import type { GameNotificationKind } from '@/lib/sim';
 
@@ -20,8 +21,13 @@ export function NotificationInbox() {
   const { mode, difficulty, notifications, markNotificationsRead, dismissNotification, clearNotifications, setSelectedDeal } = useApp();
   const [open, setOpen] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const [mounted, setMounted] = useState(false);
   const seen = useRef<Set<string>>(new Set());
   const firstRun = useRef(true);
+
+  // panels/toasts are portaled to <body> so the TopBar's backdrop-blur (a containing block) can't
+  // trap their fixed positioning inside the tiny header — that's why they were unreadable before.
+  useEffect(() => setMounted(true), []);
 
   const unread = notifications.filter((n) => !n.read).length;
 
@@ -66,8 +72,8 @@ export function NotificationInbox() {
         {unread > 0 && <span className="absolute -right-1.5 -top-1.5 grid h-4 min-w-4 place-items-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">{unread}</span>}
       </button>
 
-      {/* slide-over inbox */}
-      {open && (
+      {/* slide-over inbox (portaled to <body> so it's full-height, not trapped in the header) */}
+      {mounted && open && createPortal(
         <>
           <div className="fixed inset-0 z-40 bg-black/20" onClick={() => setOpen(false)} />
           <aside className="fixed inset-y-0 right-0 z-50 flex w-full max-w-sm flex-col border-l border-slate-200 bg-white shadow-2xl">
@@ -94,12 +100,13 @@ export function NotificationInbox() {
               ))}
             </div>
           </aside>
-        </>
+        </>,
+        document.body,
       )}
 
-      {/* transient toasts */}
-      {toasts.length > 0 && (
-        <div className="fixed right-4 top-16 z-50 flex w-72 flex-col gap-2">
+      {/* transient toasts (portaled to <body>; sit at the right edge, fixed through scroll) */}
+      {mounted && toasts.length > 0 && createPortal(
+        <div className="fixed right-4 top-20 z-[60] flex w-80 flex-col gap-2">
           {toasts.map((t) => (
             <button
               key={t.id}
@@ -113,7 +120,8 @@ export function NotificationInbox() {
               <p className="mt-0.5 line-clamp-3 text-[11px] leading-relaxed text-slate-600">{t.body}</p>
             </button>
           ))}
-        </div>
+        </div>,
+        document.body,
       )}
     </>
   );

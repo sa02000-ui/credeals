@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useApp } from '@/lib/store';
 
 const BEHAVIOR_LABEL: Record<string, string> = {
@@ -15,6 +16,8 @@ const BEHAVIOR_LABEL: Record<string, string> = {
 export function RelationshipLedger() {
   const { mode, difficulty, relationships } = useApp();
   const [open, setOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []); // portal target (escape the header's backdrop-blur containing block)
   if (mode !== 'game' || !difficulty) return null;
 
   const rels = Object.values(relationships).sort((a, b) => b.personalScore - a.personalScore);
@@ -29,7 +32,7 @@ export function RelationshipLedger() {
         🤝 Relationships{rels.length > 0 && <span className="ml-1 text-slate-400">{rels.length}</span>}
       </button>
 
-      {open && (
+      {mounted && open && createPortal(
         <>
           <div className="fixed inset-0 z-40 bg-black/20" onClick={() => setOpen(false)} />
           <aside className="fixed inset-y-0 right-0 z-50 flex w-full max-w-sm flex-col border-l border-slate-200 bg-white shadow-2xl">
@@ -73,7 +76,8 @@ export function RelationshipLedger() {
               ))}
             </div>
           </aside>
-        </>
+        </>,
+        document.body,
       )}
     </>
   );
