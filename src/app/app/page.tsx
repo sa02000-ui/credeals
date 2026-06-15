@@ -9,6 +9,7 @@ import { AddDealModal } from '@/components/AddDealModal';
 import { ConversationPanel } from '@/components/ConversationPanel';
 import { CareerHud } from '@/components/CareerHud';
 import { OnboardingFlow } from '@/components/OnboardingFlow';
+import { BuyBoxModal } from '@/components/BuyBoxModal';
 import { CoachPanel } from '@/components/CoachPanel';
 import { ObjectiveHud } from '@/components/ObjectiveHud';
 import { SimDisclaimer } from '@/components/SimDisclaimer';
@@ -128,6 +129,7 @@ export default function Home() {
       {showAdd && <AddDealModal onClose={() => setShowAdd(false)} onAdded={(id) => selectDeal(id)} />}
       {convoDeal && <ConversationPanel dealId={convoDeal.id} dealName={convoDeal.name} onClose={() => setConvoId(null)} />}
       {needsOnboarding && <OnboardingFlow />}
+      <BuyBoxModal />
       {mode === 'game' && <CoachPanel />}
 
       {syncError && (
