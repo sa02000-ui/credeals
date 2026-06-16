@@ -9,7 +9,7 @@ import { RelationshipLedger } from '@/components/RelationshipLedger';
 import { NotificationInbox } from '@/components/NotificationInbox';
 
 export function TopBar() {
-  const { mode, setMode, cashBalance, day, resetAll, isAdmin, difficulty, clockPaused, setClockPaused, clockMinutesPerDay, setClockSpeed, treasury, gameEnabled } = useApp();
+  const { mode, setMode, cashBalance, day, resetAll, isAdmin, difficulty, clockPaused, setClockPaused, clockMinutesPerDay, setClockSpeed, treasury, gameEnabled, gold } = useApp();
   const showGameUi = gameEnabled || isAdmin;
   const low = cashBalance < 25_000;
   const [showLedger, setShowLedger] = useState(false);
@@ -96,6 +96,10 @@ export function TopBar() {
                     </select>
                   </div>
                 )}
+              </div>
+              <div className="flex flex-col justify-center rounded-xl border-2 border-amber-300 bg-amber-50 px-3 py-1.5 text-right" title="Gold — earned by learning (hover the ⓘ icons). More learning, more Gold.">
+                <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500">🪙 Gold</div>
+                <div className="text-lg font-extrabold leading-none tabular-nums text-amber-600">{gold}</div>
               </div>
             </div>
           )}

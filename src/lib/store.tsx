@@ -116,9 +116,14 @@ interface AppState {
   idleLevel: number;
   /** traded-away deals a broker has already called back about (so it fires once) */
   calledBackDealIds: string[];
+  /** 🪙 learning currency — earned by reading info tips (and, later, other learning actions) */
+  gold: number;
+  /** info-tip keys the player has already opened (each earns Gold once) */
+  readTips: string[];
 }
 
 const CARRY_PER_DAY = 250; // light daily carrying cost so time costs money
+const GOLD_PER_TIP = 5; // 🪙 learning reward for opening an info tip the first time
 
 const INITIAL: AppState = {
   mode: 'game',
@@ -153,6 +158,8 @@ const INITIAL: AppState = {
   lastActionDay: 1,
   idleLevel: 0,
   calledBackDealIds: [],
+  gold: 0,
+  readTips: [],
 };
 
 interface AppContextValue extends AppState {
@@ -176,6 +183,8 @@ interface AppContextValue extends AppState {
   markNotificationsRead: () => void;
   dismissNotification: (id: string) => void;
   clearNotifications: () => void;
+  /** record that the player opened an info tip — earns Gold once per tip (game mode) */
+  learnTip: (key: string) => void;
   initAMState: (dealId: string, occupancy: number, noi: number) => void;
   applyAMEffect: (dealId: string, effect: AMEffect, quarter: number, cardId: string, optionId: string) => void;
   advanceAMQuarter: (dealId: string, distribution: number) => void;
@@ -553,6 +562,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setState((s) => (s.notifications.some((x) => !x.read) ? { ...s, notifications: s.notifications.map((x) => ({ ...x, read: true })) } : s)),
       dismissNotification: (id) => setState((s) => ({ ...s, notifications: s.notifications.filter((x) => x.id !== id) })),
       clearNotifications: () => setState((s) => ({ ...s, notifications: [] })),
+      learnTip: (key) =>
+        setState((s) => {
+          if (s.mode !== 'game' || !s.difficulty || !key || s.readTips.includes(key)) return s;
+          const gold = s.gold + GOLD_PER_TIP;
+          const note: GameNotification = { id: `nt-gold-${key}`, ts: Date.now(), day: s.day, kind: 'system', title: `🪙 +${GOLD_PER_TIP} Gold`, body: `You earned Gold for learning (${gold} total). The more you read and learn, the more you earn.`, read: false };
+          return { ...s, gold, readTips: [...s.readTips, key], notifications: [...s.notifications, note].slice(-60) };
+        }),
       initAMState: (dealId, occupancy, noi) =>
         setState((s) =>
           s.amStates[dealId]

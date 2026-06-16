@@ -72,7 +72,7 @@ export function AssetClassHover({ id, children }: { id: AssetClass; children: Re
     >
       {children}
       {open && (
-        <span className="absolute bottom-full left-1/2 z-50 mb-2 -translate-x-1/2 rounded-xl border border-slate-200 bg-white p-3 shadow-2xl">
+        <span className="absolute left-0 top-full z-50 mt-2 rounded-xl border border-slate-200 bg-white p-3 shadow-2xl">
           {f ? <AssetFactCard f={f} /> : <span className="block w-48 text-[11px] text-slate-500">{ASSET_CLASSES.find((a) => a.id === id)?.label ?? id}: details coming soon.</span>}
         </span>
       )}

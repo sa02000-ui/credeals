@@ -86,7 +86,7 @@ export function OnboardingFlow() {
                 {PACES.map((p) => (
                   <button key={p.min} onClick={() => setSpeed(p.min)} className={`rounded-xl border-2 px-3 py-3 text-center transition ${speed === p.min ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 text-slate-700 hover:bg-slate-50'}`}>
                     <div className="text-base font-bold">{p.label}</div>
-                    <div className={`text-xs font-semibold ${speed === p.min ? 'text-slate-200' : 'text-slate-500'}`}>{p.min} min / day</div>
+                    <div className={`text-xs font-semibold ${speed === p.min ? 'text-slate-200' : 'text-slate-500'}`}>{p.min} real min = 1 sim day</div>
                     <div className={`mt-1 text-[11px] leading-tight ${speed === p.min ? 'text-slate-300' : 'text-slate-400'}`}>{p.note}</div>
                   </button>
                 ))}
@@ -123,15 +123,16 @@ export function OnboardingFlow() {
               </div>
 
               <button onClick={() => setRulesOpen((v) => !v)} className="mt-3 flex w-full items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-left text-sm font-semibold text-slate-800 hover:bg-slate-100">
-                📋 Ground rules <span className="ml-auto text-slate-400">{rulesOpen ? '▾' : '▸'}</span>
+                📋 Rules of Engagement <span className="ml-auto text-slate-400">{rulesOpen ? '▾' : '▸'}</span>
               </button>
               {rulesOpen && (
                 <ul className="mt-2 space-y-1.5 rounded-lg bg-slate-50 p-3 text-[13px] leading-relaxed text-slate-700">
+                  <li>• <b>The goal is to learn.</b> There’s a lot of detail here — take your time, and <b>hover the ⓘ icons</b> (and other spots with hidden info). The more you read and learn, the more <b>🪙 Gold</b> you earn.</li>
                   <li>• We simulate <b>1 real-life day in the minutes you chose</b> — you picked <b>{speed} minutes / day</b>.</li>
                   <li>• With each passing day, a <b>carry cost</b> lowers your cash, whether or not you’re working a deal.</li>
                   <li>• The <b>type of deals you get</b> depends on how you choose to hunt for them.</li>
                   <li>• Your <b>underwriting and negotiation</b> (LOI, PSA, C2C) determine whether you actually win the deal.</li>
-                  <li>• Your <b>Asset Management results</b> depend on the deal you pick, how good your underwriting is, how well you did your due diligence, and how well you operate it.</li>
+                  <li>• Your <b>Asset Management results</b> depend mostly on <b>how well you operate it and on market conditions</b> — but are also influenced by the deal you pick, how well you underwrote it, your due diligence, and how well you negotiated.</li>
                 </ul>
               )}
 

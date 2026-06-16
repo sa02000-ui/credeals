@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useApp } from '@/lib/store';
 import { learn } from '@/lib/learn/glossary';
 
 /**
@@ -22,10 +23,16 @@ export function InfoTip({
   className?: string;
 }) {
   const [open, setOpen] = useState(false);
+  const { learnTip } = useApp();
   const entry = k ? learn(k) : undefined;
   const t = title ?? entry?.title ?? 'About';
   const w = what ?? entry?.what;
   const a = app ?? entry?.app;
+  // 🪙 reading a tip earns Gold once (game mode) — keyed by glossary key or title
+  const tipKey = k ?? title ?? '';
+  useEffect(() => {
+    if (open && tipKey) learnTip(tipKey);
+  }, [open, tipKey, learnTip]);
   if (!w && !a) return null;
 
   return (
