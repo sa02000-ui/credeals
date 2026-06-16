@@ -33,9 +33,9 @@ export const ASSET_CLASSES: AssetClassDef[] = [
 ];
 
 /** Deal lifecycle stages — the full pipeline (feed groups + per-deal phases). */
-export type DealStage = 'new' | 'napkin' | 'detailed' | 'loi' | 'c2c' | 'am' | 'archived';
+export type DealStage = 'new' | 'napkin' | 'detailed' | 'loi' | 'c2c' | 'am' | 'lost' | 'archived';
 
-export type StageColor = 'amber' | 'sky' | 'indigo' | 'violet' | 'emerald' | 'teal' | 'slate';
+export type StageColor = 'amber' | 'sky' | 'indigo' | 'violet' | 'emerald' | 'teal' | 'slate' | 'rose';
 
 export interface StageDef {
   id: DealStage;
@@ -52,6 +52,7 @@ export const STAGES: StageDef[] = [
   { id: 'loi', label: 'LOI', short: 'LOI', color: 'violet' },
   { id: 'c2c', label: 'Contract to Close', short: 'C2C', color: 'emerald' },
   { id: 'am', label: 'Asset Management', short: 'AM', color: 'teal' },
+  { id: 'lost', label: 'Lost Deals', short: 'Lost', color: 'rose' },
   { id: 'archived', label: 'Archived', short: 'Archived', color: 'slate' },
 ];
 

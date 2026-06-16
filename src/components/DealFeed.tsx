@@ -22,6 +22,7 @@ const ACCENT: Record<string, string> = {
   violet: 'border-l-violet-400 bg-violet-50',
   emerald: 'border-l-emerald-400 bg-emerald-50',
   teal: 'border-l-teal-400 bg-teal-50',
+  rose: 'border-l-rose-400 bg-rose-50',
   slate: 'border-l-slate-400 bg-slate-100',
 };
 
@@ -37,7 +38,7 @@ export function DealFeed({
   onOpenConversation: (id: string) => void;
 }) {
   const { deals, statusOf, dealsIncoming, mode } = useApp();
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({ archived: true });
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({ archived: true, lost: true });
   const [callOpen, setCallOpen] = useState(false);
 
   const byStage = (stage: DealStage) => deals.filter((d) => statusOf(d.id) === stage);

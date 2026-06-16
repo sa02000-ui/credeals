@@ -238,7 +238,7 @@ export function LOIPanel({ deal }: { deal: MarketDeal }) {
   function onLoiLost() {
     applyGameOutcome({ dealId: deal.id, repDelta: { broker: -2 }, event: { title: `Lost: ${deal.name}`, detail: 'The seller went another direction.', lesson: 'You can’t win them all — move faster or sharpen your terms next time.' } });
     setNegotiating(false);
-    setStatus(deal.id, 'archived');
+    setStatus(deal.id, 'lost'); // a deal the seller walked from is Lost, not user-Archived
   }
   function onPsaDone(caught: string[], missed: string[]) {
     setPsaState({ done: true, caught, missed });

@@ -67,7 +67,7 @@ export function C2CDeck({ deal }: { deal: MarketDeal }) {
     if (flags.retraded) updateRelationship(broker.id, 'retraded', deal.id, `Retraded on ${deal.name}`);
     if (flags.walk) {
       applyGameOutcome({ dealId: deal.id, repDelta: { broker: -3 }, event: { title: `Walked: ${deal.name}`, detail: 'You walked from the deal.', lesson: 'Walking protects capital. The discipline to pass is a skill.' } });
-      setStatus(deal.id, 'archived');
+      setStatus(deal.id, 'lost'); // the deal fell through in C2C → Lost (not a clean user Archive)
       setState((s) => ({ ...s, flags: merged }));
       return;
     }

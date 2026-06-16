@@ -23,6 +23,7 @@ const PHASE_INFO: Record<DealStage, string> = {
   loi: 'step.loi',
   c2c: 'step.c2c',
   am: 'step.am',
+  lost: 'step.pick',
   archived: 'step.pick',
 };
 
@@ -38,8 +39,9 @@ const STAGE_COACH: Partial<Record<DealStage, string>> = {
 export function DealPhases({ deal, onOpenConversation, onPhaseChange }: { deal: MarketDeal; onOpenConversation: () => void; onPhaseChange?: (phase: string) => void }) {
   const { statusOf, mode, difficulty, coachingMode, addCoachMessage } = useApp();
   const status = statusOf(deal.id);
-  const unlockedThrough = status === 'archived' ? 0 : Math.max(0, stageIndex(status));
-  const [phase, setPhase] = useState<Tab>(status === 'new' || status === 'archived' ? 'napkin' : status);
+  const terminal = status === 'archived' || status === 'lost';
+  const unlockedThrough = terminal ? 0 : Math.max(0, stageIndex(status));
+  const [phase, setPhase] = useState<Tab>(status === 'new' || terminal ? 'napkin' : status);
 
   // Ray narrates each stage the first time this deal reaches it (game mode, non-silent profiles).
   const [coached, setCoached] = useDealLocal<string[]>('coached-stages', deal.id, []);
@@ -57,7 +59,7 @@ export function DealPhases({ deal, onOpenConversation, onPhaseChange }: { deal: 
   // Guided flow: when the deal advances a stage (e.g. "Pass napkin → Detailed UW"), follow it to that tab.
   const prevStatus = useRef(status);
   useEffect(() => {
-    if (status !== prevStatus.current && status !== 'new' && status !== 'archived') setPhase(status);
+    if (status !== prevStatus.current && status !== 'new' && status !== 'archived' && status !== 'lost') setPhase(status);
     prevStatus.current = status;
   }, [status]);
 
@@ -68,6 +70,12 @@ export function DealPhases({ deal, onOpenConversation, onPhaseChange }: { deal: 
 
   return (
     <div className="space-y-3">
+      {status === 'lost' && (
+        <div className="rounded-xl border-2 border-rose-300 bg-rose-50 p-4">
+          <div className="text-base font-bold text-rose-800">💔 Deal lost</div>
+          <p className="mt-1 text-sm text-rose-700">This one didn’t come together — the seller went another way or it fell through in diligence. It’s filed under <b>Lost</b> in your feed. Pick another deal and apply what you learned (open Ray if you want to talk through what to do differently).</p>
+        </div>
+      )}
       <DealPeoplePanel deal={deal} />
       <DealDNAPanel deal={deal} />
 
@@ -113,7 +121,7 @@ export function DealPhases({ deal, onOpenConversation, onPhaseChange }: { deal: 
       </div>
 
       {/* Contextual "what is this step" helper (learn-as-you-go) */}
-      {phase !== 'docs' && (
+      {phase !== 'docs' && !terminal && (
         <div className="flex items-center gap-1.5 px-1 text-xs text-slate-500">
           <span className="font-medium text-slate-600">{stageDef(phase).label}</span>
           <InfoTip k={PHASE_INFO[phase]} />
@@ -121,11 +129,12 @@ export function DealPhases({ deal, onOpenConversation, onPhaseChange }: { deal: 
         </div>
       )}
 
-      {phase === 'napkin' && <NapkinPanel deal={deal} onOpenConversation={onOpenConversation} />}
-      {phase === 'detailed' && <DetailedUWPanel deal={deal} />}
-      {phase === 'loi' && <LOIPanel deal={deal} />}
-      {phase === 'c2c' && <C2CPanel deal={deal} />}
-      {phase === 'am' && <AMPanel deal={deal} />}
+      {/* A lost/archived deal can't proceed — only its Documents stay viewable */}
+      {!terminal && phase === 'napkin' && <NapkinPanel deal={deal} onOpenConversation={onOpenConversation} />}
+      {!terminal && phase === 'detailed' && <DetailedUWPanel deal={deal} />}
+      {!terminal && phase === 'loi' && <LOIPanel deal={deal} />}
+      {!terminal && phase === 'c2c' && <C2CPanel deal={deal} />}
+      {!terminal && phase === 'am' && <AMPanel deal={deal} />}
       {phase === 'docs' && <DocumentsPanel deal={deal} />}
     </div>
   );

@@ -120,6 +120,12 @@ interface AppState {
   gold: number;
   /** info-tip keys the player has already opened (each earns Gold once) */
   readTips: string[];
+  /** count of deals that ended Lost (drives Ray's "what to do differently" hint) */
+  dealsLost: number;
+  lostHintGiven: boolean;
+  /** deals marked Lost — tracked client-side so it works without a DB enum migration ('lost' isn't
+   *  in the deal_stage enum); statusOf overrides to 'lost' for these. */
+  lostDealIds: string[];
 }
 
 const CARRY_PER_DAY = 250; // light daily carrying cost so time costs money
@@ -160,6 +166,9 @@ const INITIAL: AppState = {
   calledBackDealIds: [],
   gold: 0,
   readTips: [],
+  dealsLost: 0,
+  lostHintGiven: false,
+  lostDealIds: [],
 };
 
 interface AppContextValue extends AppState {
@@ -420,7 +429,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     // Game and Real are separate worlds: each mode only sees its own deals (deals.sim_mode).
     const allDeals = configured ? (dbDeals ?? []) : [...state.customDeals, ...SEED_DEALS];
     const statusOf = (id: string): DealStatus =>
-      configured ? (dbStages[id] ?? 'new') : (state.dealStates[id]?.status ?? 'new');
+      state.lostDealIds.includes(id) ? 'lost' : configured ? (dbStages[id] ?? 'new') : (state.dealStates[id]?.status ?? 'new');
     let deals = allDeals.filter((d) => (d.simMode ?? 'game') === state.mode);
     let dealsIncoming = 0; // game-mode deals scheduled to arrive on a later day (not yet shown)
     // Game mode: deals arrive over days through channels and expire if ignored (Phase B). A pursued
@@ -469,6 +478,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     function setStatus(dealId: string, status: DealStatus) {
       const prev = statusOf(dealId);
       if (prev === status) return;
+      // 'lost' is tracked client-side (it isn't in the deal_stage DB enum) — mark it, count it, and
+      // after a few losses have Ray offer concrete guidance. No DB write (statusOf overrides display).
+      if (status === 'lost') {
+        setState((s) => {
+          if (s.lostDealIds.includes(dealId)) return s;
+          const dealsLost = s.dealsLost + 1;
+          const base = { ...s, lastActionDay: s.day, idleLevel: 0, lostDealIds: [...s.lostDealIds, dealId], dealsLost };
+          if (dealsLost < 3 || s.lostHintGiven) return base;
+          const ts = Date.now();
+          const text = "Losing a few stings — let's fix it. Most lost deals come down to one of three things: (1) your offer was too far below the seller's floor — meet closer to their number; (2) weak terms — a higher earnest deposit, a shorter due-diligence window, and dropping the financing contingency make you the safer buyer even at a lower price; (3) thin broker rapport — the credible buyer who can actually close gets the look. Try sharpening your terms before chasing price.";
+          const cm: CoachMessage = { id: `cm-losthint-${ts}`, from: 'coach', text, ts, trigger: 'lost-hint' };
+          const note: GameNotification = { id: `nt-losthint-${ts}`, ts, day: s.day, kind: 'coach', title: 'Ray — how to win the next one', body: text, read: false };
+          return { ...base, lostHintGiven: true, coachMessages: [...s.coachMessages, cm].slice(-100), notifications: [...s.notifications, note].slice(-60) };
+        });
+        return; // don't write 'lost' to the DB enum
+      }
       setState((s) => ({ ...s, lastActionDay: s.day, idleLevel: 0 })); // any stage change counts as activity
       chargePursuit(dealId, status, prev);
       const dayCost = STAGE_DAY_COST[status] ?? 0;
