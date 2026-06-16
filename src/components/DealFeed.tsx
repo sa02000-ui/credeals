@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useApp } from '@/lib/store';
+import { BrokerCallModal } from '@/components/BrokerCallModal';
 import {
   STAGES,
   analyzeDeal,
@@ -37,6 +38,7 @@ export function DealFeed({
 }) {
   const { deals, statusOf, dealsIncoming, mode } = useApp();
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({ archived: true });
+  const [callOpen, setCallOpen] = useState(false);
 
   const byStage = (stage: DealStage) => deals.filter((d) => statusOf(d.id) === stage);
 
@@ -44,13 +46,24 @@ export function DealFeed({
     <section className="rounded-xl border border-slate-200 bg-white">
       <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
         <h2 className="text-sm font-semibold">Step 2 · Deal Feed</h2>
-        <button
-          onClick={onAddDeal}
-          className="rounded-md border border-slate-300 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100"
-        >
-          + Add deal
-        </button>
+        <div className="flex items-center gap-1.5">
+          {mode === 'game' && (
+            <button
+              onClick={() => setCallOpen(true)}
+              className="rounded-md border border-violet-300 bg-violet-50 px-2 py-1 text-xs font-semibold text-violet-700 hover:bg-violet-100"
+            >
+              📞 Call brokers
+            </button>
+          )}
+          <button
+            onClick={onAddDeal}
+            className="rounded-md border border-slate-300 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100"
+          >
+            + Add deal
+          </button>
+        </div>
       </div>
+      {callOpen && <BrokerCallModal onClose={() => setCallOpen(false)} />}
 
       <div className="divide-y divide-slate-100">
         {STAGES.map((stage) => {
