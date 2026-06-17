@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useApp } from '@/lib/store';
 import { useDealLocal } from '@/lib/hooks/useDealLocal';
 import { InfoTip } from '@/components/InfoTip';
+import { MoneyInput } from '@/components/MoneyInput';
 import { StageEncounters } from '@/components/StageEncounters';
 import { scoreUW, getCoachMessage, buildNapkinScenarios } from '@/lib/sim';
 import {
@@ -599,13 +600,22 @@ function Field({ label, value, onChange, step = 1, money, wide, info }: { label:
       <span className="flex items-center gap-1 text-[11px] font-medium text-slate-500">{label}{info && <InfoTip k={info} />}</span>
       <div className="relative">
         {money && <span className="pointer-events-none absolute left-2 top-1.5 text-xs text-slate-400">$</span>}
-        <input
-          type="number"
-          value={value}
-          step={step}
-          onChange={(e) => onChange(Number(e.target.value))}
-          className={`w-full rounded-md border border-slate-300 py-1 text-sm tabular-nums focus:border-slate-900 focus:outline-none ${money ? 'pl-5 pr-2' : 'px-2'}`}
-        />
+        {money ? (
+          <MoneyInput
+            value={value}
+            onChange={onChange}
+            ariaLabel={label}
+            className="w-full rounded-md border border-slate-300 py-1 pl-5 pr-2 text-sm tabular-nums focus:border-slate-900 focus:outline-none"
+          />
+        ) : (
+          <input
+            type="number"
+            value={value}
+            step={step}
+            onChange={(e) => onChange(Number(e.target.value))}
+            className="w-full rounded-md border border-slate-300 py-1 px-2 text-sm tabular-nums focus:border-slate-900 focus:outline-none"
+          />
+        )}
       </div>
     </label>
   );

@@ -14,6 +14,7 @@ import { useMemo, useState } from 'react';
 import { useApp } from '@/lib/store';
 import { useDealLocal } from '@/lib/hooks/useDealLocal';
 import { InfoTip } from '@/components/InfoTip';
+import { MoneyInput } from '@/components/MoneyInput';
 import {
   ACQ_FEE_LADDER,
   GP_BUCKETS,
@@ -117,7 +118,7 @@ export function GPTeamPanel({ deal }: { deal: MarketDeal }) {
             {state.linkToUW ? (
               <div className="text-sm tabular-nums text-slate-800">{usd(totalGPProfit)}<span className="ml-1 text-[11px] text-slate-400">{link.ok ? 'from Detailed UW' : '(run Detailed UW)'}</span></div>
             ) : (
-              <input type="number" value={state.totalGPProfit} onChange={(e) => setState((s) => ({ ...s, totalGPProfit: Number(e.target.value) }))} className="w-full rounded border border-slate-300 px-2 py-1 text-right text-sm tabular-nums focus:outline-none" />
+              <MoneyInput value={state.totalGPProfit} onChange={(v) => setState((s) => ({ ...s, totalGPProfit: v }))} ariaLabel="GP profit pool" className="w-full rounded border border-slate-300 px-2 py-1 text-right text-sm tabular-nums focus:outline-none" />
             )}
           </div>
 

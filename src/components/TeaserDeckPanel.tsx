@@ -11,6 +11,7 @@
 import { useMemo } from 'react';
 import { useDealLocal } from '@/lib/hooks/useDealLocal';
 import { InfoTip } from '@/components/InfoTip';
+import { MoneyInput } from '@/components/MoneyInput';
 import {
   defaultDetailedInputs,
   defaultGPTeam,
@@ -120,7 +121,7 @@ export function TeaserDeckPanel({ deal }: { deal: MarketDeal }) {
             ))}
           </div>
           <label className="mt-3 flex items-center gap-2 text-[11px] text-white/70">Min. investment $
-            <input type="number" value={state.minInvestment} onChange={(e) => setState((s) => ({ ...s, minInvestment: Number(e.target.value) }))} className="w-28 rounded border border-white/30 bg-white/10 px-2 py-0.5 text-right text-xs tabular-nums text-white focus:outline-none" />
+            <MoneyInput value={state.minInvestment} onChange={(v) => setState((s) => ({ ...s, minInvestment: v }))} ariaLabel="Minimum investment" className="w-28 rounded border border-white/30 bg-white/10 px-2 py-0.5 text-right text-xs tabular-nums text-white focus:outline-none" />
           </label>
         </Slide>
 

@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { useApp } from '@/lib/store';
 import { useDealLocal } from '@/lib/hooks/useDealLocal';
 import { InfoTip } from '@/components/InfoTip';
+import { MoneyInput } from '@/components/MoneyInput';
 import {
   BASIS_LABEL,
   defaultDetailedInputs,
@@ -670,13 +671,13 @@ function FileStatus({ ok, label }: { ok: boolean; label: string }) {
   );
 }
 
-function Money({ label, v, onChange, step = 1, info }: { label: string; v: number; onChange: (n: number) => void; step?: number; info?: string }) {
+function Money({ label, v, onChange, info }: { label: string; v: number; onChange: (n: number) => void; step?: number; info?: string }) {
   return (
     <label className="block">
       <span className="flex items-center gap-1 text-[11px] text-slate-500">{label}{info && <InfoTip k={info} />}</span>
       <div className="relative">
         <span className="pointer-events-none absolute left-2 top-1.5 text-xs text-slate-400">$</span>
-        <input type="number" value={v} step={step} onChange={(e) => onChange(Number(e.target.value))} className="w-full rounded-md border border-slate-300 py-1 pl-5 pr-2 text-sm tabular-nums focus:border-slate-900 focus:outline-none" />
+        <MoneyInput value={v} onChange={onChange} ariaLabel={label} className="w-full rounded-md border border-slate-300 py-1 pl-5 pr-2 text-sm tabular-nums focus:border-slate-900 focus:outline-none" />
       </div>
     </label>
   );

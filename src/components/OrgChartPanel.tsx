@@ -14,6 +14,7 @@
 import { useMemo } from 'react';
 import { useDealLocal } from '@/lib/hooks/useDealLocal';
 import { InfoTip } from '@/components/InfoTip';
+import { MoneyInput } from '@/components/MoneyInput';
 import {
   defaultDetailedInputs,
   defaultGPTeam,
@@ -113,7 +114,7 @@ export function OrgChartPanel({ deal }: { deal: MarketDeal }) {
             <input value={state.managerEntity} onChange={(e) => setState((s) => ({ ...s, managerEntity: e.target.value }))} className="w-full rounded border border-slate-300 px-2 py-1 text-sm focus:outline-none" />
           </Field>
           <Field label="Total equity" hint={uw.ok && state.totalEquityOverride == null ? 'from Detailed UW' : 'manual'}>
-            <input type="number" value={totalEquity} onChange={(e) => setState((s) => ({ ...s, totalEquityOverride: Number(e.target.value) }))} className="w-full rounded border border-slate-300 px-2 py-1 text-right text-sm tabular-nums focus:outline-none" />
+            <MoneyInput value={totalEquity} onChange={(v) => setState((s) => ({ ...s, totalEquityOverride: v }))} ariaLabel="Total equity" className="w-full rounded border border-slate-300 px-2 py-1 text-right text-sm tabular-nums focus:outline-none" />
           </Field>
         </div>
 
@@ -158,7 +159,7 @@ export function OrgChartPanel({ deal }: { deal: MarketDeal }) {
                 {state.classA.map((a) => (
                   <div key={a.id} className="flex items-center gap-1.5 rounded-md bg-white px-2 py-1 ring-1 ring-sky-100">
                     <input value={a.name} onChange={(e) => setA(a.id, { name: e.target.value })} className="min-w-0 flex-1 rounded border border-transparent px-1 py-0.5 text-xs hover:border-slate-200 focus:border-slate-300 focus:outline-none" />
-                    <input type="number" value={a.amount} onChange={(e) => setA(a.id, { amount: Number(e.target.value) })} className="w-24 rounded border border-slate-200 px-1 py-0.5 text-right text-xs tabular-nums focus:outline-none" />
+                    <MoneyInput value={a.amount} onChange={(v) => setA(a.id, { amount: v })} ariaLabel={`${a.name} amount`} className="w-24 rounded border border-slate-200 px-1 py-0.5 text-right text-xs tabular-nums focus:outline-none" />
                     <span className="w-12 text-right text-[11px] tabular-nums text-slate-500">{pct(ownPct(a.amount), 1)}</span>
                     <button onClick={() => delA(a.id)} className="text-slate-300 hover:text-red-500" title="Remove">✕</button>
                   </div>
@@ -175,7 +176,7 @@ export function OrgChartPanel({ deal }: { deal: MarketDeal }) {
                 {classB.map((b) => (
                   <div key={b.id} className="flex items-center gap-1.5 rounded-md bg-white px-2 py-1 ring-1 ring-emerald-100">
                     <span className="min-w-0 flex-1 truncate px-1 text-xs text-slate-700">{b.name}</span>
-                    <input type="number" value={b.amount} onChange={(e) => setCoinvest(b.id, Number(e.target.value))} className="w-24 rounded border border-slate-200 px-1 py-0.5 text-right text-xs tabular-nums focus:outline-none" />
+                    <MoneyInput value={b.amount} onChange={(v) => setCoinvest(b.id, v)} ariaLabel={`${b.name} co-invest`} className="w-24 rounded border border-slate-200 px-1 py-0.5 text-right text-xs tabular-nums focus:outline-none" />
                     <span className="w-12 text-right text-[11px] tabular-nums text-slate-500">{pct(ownPct(b.amount), 1)}</span>
                   </div>
                 ))}

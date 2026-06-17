@@ -370,7 +370,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const idleDays = state.day - state.lastActionDay;
     const burned = state.carryPerDay * idleDays;
     const levels: { lvl: number; days: number; kind: 'coach' | 'idle' | 'opportunity'; title: string; body: string }[] = [
-      { lvl: 1, days: 4, kind: 'coach', title: 'Ray', body: `You've gone quiet for a few days. Momentum matters — every idle day burns ~$${state.carryPerDay} in carry whether or not you're working a deal. What's our next move?` },
+      { lvl: 1, days: 4, kind: 'coach', title: 'Ray', body: `You've gone quiet for a few days. Momentum matters — every idle day burns ~$${state.carryPerDay.toLocaleString('en-US')} in carry whether or not you're working a deal. What's our next move?` },
       { lvl: 2, days: 8, kind: 'idle', title: '⏳ Time is money', body: `${idleDays} days idle — roughly $${burned.toLocaleString()} in carrying costs with nothing under contract. Underwrite a deal or tighten your buy box to see more flow.` },
       { lvl: 3, days: 13, kind: 'opportunity', title: '✨ A look worth taking', body: `Quiet stretch — but a broker just flagged something that fits your box. Don't let the meter run; go take a look.` },
     ];
