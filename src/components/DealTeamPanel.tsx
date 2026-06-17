@@ -12,6 +12,7 @@ import { useState } from 'react';
 import { InfoTip } from '@/components/InfoTip';
 import { GPTeamPanel } from '@/components/GPTeamPanel';
 import { OrgChartPanel } from '@/components/OrgChartPanel';
+import { TeaserDeckPanel } from '@/components/TeaserDeckPanel';
 import type { MarketDeal } from '@/lib/sim';
 
 type TeamTab = 'splits' | 'org' | 'teaser';
@@ -56,16 +57,7 @@ export function DealTeamPanel({ deal }: { deal: MarketDeal }) {
 
       {tab === 'splits' && <GPTeamPanel deal={deal} />}
       {tab === 'org' && <OrgChartPanel deal={deal} />}
-      {tab === 'teaser' && <ComingNext title="Investor Teaser" body="The 4-slide investor summary (executive summary, why invest, sponsor team, important dates), auto-filled from your Detailed UW numbers and the GP team. Builds next." />}
+      {tab === 'teaser' && <TeaserDeckPanel deal={deal} />}
     </div>
-  );
-}
-
-function ComingNext({ title, body }: { title: string; body: string }) {
-  return (
-    <section className="rounded-xl border border-dashed border-slate-300 bg-slate-50/60 p-6 text-center">
-      <div className="text-sm font-semibold text-slate-700">{title}</div>
-      <p className="mx-auto mt-1 max-w-md text-xs text-slate-500">{body}</p>
-    </section>
   );
 }
