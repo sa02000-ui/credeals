@@ -11,6 +11,7 @@
 import { useState } from 'react';
 import { InfoTip } from '@/components/InfoTip';
 import { GPTeamPanel } from '@/components/GPTeamPanel';
+import { OrgChartPanel } from '@/components/OrgChartPanel';
 import type { MarketDeal } from '@/lib/sim';
 
 type TeamTab = 'splits' | 'org' | 'teaser';
@@ -54,8 +55,8 @@ export function DealTeamPanel({ deal }: { deal: MarketDeal }) {
       </div>
 
       {tab === 'splits' && <GPTeamPanel deal={deal} />}
-      {tab === 'org' && <ComingNext title="Org Chart" body="The lender-facing entity structure — Ownership Entity → Manager Entity → Class A (passive LPs) and Class B (GP members) — auto-built from your GP Roles & Splits. Builds next." />}
-      {tab === 'teaser' && <ComingNext title="Investor Teaser" body="The 4-slide investor summary (executive summary, why invest, sponsor team, important dates), auto-filled from your Detailed UW numbers and the GP team. Builds after the Org Chart." />}
+      {tab === 'org' && <OrgChartPanel deal={deal} />}
+      {tab === 'teaser' && <ComingNext title="Investor Teaser" body="The 4-slide investor summary (executive summary, why invest, sponsor team, important dates), auto-filled from your Detailed UW numbers and the GP team. Builds next." />}
     </div>
   );
 }
