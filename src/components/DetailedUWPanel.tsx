@@ -182,19 +182,32 @@ export function DetailedUWPanel({ deal }: { deal: MarketDeal }) {
             {r.sellerMaturesEarly && `Seller note balloons in year ${inp.sellerTermYears}, before exit — plan a payoff/refi.`}
           </div>
         )}
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <Kpi label="Purchase price" value={usd(inp.purchasePrice, { compact: true })} />
-          <Kpi label="Levered IRR" info="r.irr" value={pct(r.leveredIRR)} tone={tone(r.leveredIRR, 0.15, 0.1)} big />
-          <Kpi label="Equity multiple" info="r.em" value={`${r.equityMultiple.toFixed(2)}x`} big />
-          <Kpi label="Avg cash-on-cash" info="r.coc" value={pct(r.avgCashOnCash)} big />
-          <Kpi label="LP IRR" value={pct(r.lpIRR)} tone={tone(r.lpIRR, 0.13, 0.09)} />
-          <Kpi label="LP equity multiple" value={`${r.lpEquityMultiple.toFixed(2)}x`} />
-          {inp.prefEquityEnabled && <Kpi label="Pref IRR" info="f.prefEquity" value={pct(r.prefIRR)} />}
-          <Kpi label="GP profit" info="r.promote" value={usd(r.gpProfit, { compact: true })} />
-          <Kpi label="Project (unlevered) IRR" value={pct(r.projectIRR)} />
-          <Kpi label="Going-in cap" info="m.walkInCap" value={pct(r.goingInCap)} />
-          <Kpi label="Yr-1 DSCR" info="m.dscr" value={r.year1DSCR.toFixed(2)} tone={r.year1DSCR >= 1.25 ? 'good' : 'bad'} />
-          <Kpi label="Equity required" value={usd(r.equityRequired, { compact: true })} />
+        {/* Four grouped, color-coded blocks: deal terms · LP returns · project returns · GP (owner #13) */}
+        <div className="grid grid-cols-1 gap-2 lg:grid-cols-4">
+          <KpiGroup label="Deal terms" color="slate">
+            <Kpi label="Purchase price" value={usd(inp.purchasePrice, { compact: true })} />
+            <Kpi label="Loan rate" info="f.interestRate" value={pct(inp.interestRate)} />
+            <Kpi label="Equity required" value={usd(r.equityRequired, { compact: true })} />
+            <Kpi label="Exit cap" info="m.stabilizedCap" value={pct(inp.exitCapRate)} />
+          </KpiGroup>
+          <KpiGroup label="LP (investor) returns" color="emerald">
+            <Kpi label="LP IRR" info="r.irr" value={pct(r.lpIRR)} tone={tone(r.lpIRR, 0.13, 0.09)} big />
+            <Kpi label="LP equity multiple" info="r.em" value={`${r.lpEquityMultiple.toFixed(2)}x`} big />
+            <Kpi label="Avg cash-on-cash" info="r.coc" value={pct(r.lpAvgCashOnCash)} />
+            <Kpi label="Yr-1 DSCR" info="m.dscr" value={r.year1DSCR.toFixed(2)} tone={r.year1DSCR >= 1.25 ? 'good' : 'bad'} />
+          </KpiGroup>
+          <KpiGroup label="Project returns" color="sky">
+            <Kpi label="Project IRR (levered)" value={pct(r.leveredIRR)} tone={tone(r.leveredIRR, 0.15, 0.1)} big />
+            <Kpi label="Equity multiple" value={`${r.equityMultiple.toFixed(2)}x`} />
+            <Kpi label="Avg cash-on-cash" value={pct(r.avgCashOnCash)} />
+            <Kpi label="Unlevered IRR" value={pct(r.projectIRR)} />
+          </KpiGroup>
+          <KpiGroup label="GP (sponsor)" color="violet">
+            <Kpi label="GP total profit" info="r.promote" value={usd(r.gpProfit, { compact: true })} big />
+            <Kpi label="GP equity multiple" value={`${r.gpMultiple.toFixed(2)}x`} />
+            {inp.prefEquityEnabled && <Kpi label="Pref IRR" info="f.prefEquity" value={pct(r.prefIRR)} />}
+            <Kpi label="Going-in cap" info="m.walkInCap" value={pct(r.goingInCap)} />
+          </KpiGroup>
         </div>
       </div>
 
@@ -356,6 +369,10 @@ export function DetailedUWPanel({ deal }: { deal: MarketDeal }) {
           <Pct label="Exit cap" info="m.stabilizedCap" v={inp.exitCapRate} onChange={(v) => set({ exitCapRate: v })} />
           <Pct label="Sale cost %" info="c.exitCosts" v={inp.saleCostPct} onChange={(v) => set({ saleCostPct: v })} />
         </div>
+        <div className="mt-2 rounded bg-rose-50 px-2 py-1 text-[11px] text-rose-800">
+          → {pct(inp.saleCostPct)} of the {usd(r.salePrice, { compact: true })} sale ={' '}
+          <b>{usd(r.saleCosts)}</b> in total sale &amp; exit costs (incl. any line items below).
+        </div>
         <LineItems title="Other exit costs" info="c.exitCosts" items={inp.exitItems} ctx={incCtx} onChange={(id, p) => updateLine('exitItems', id, p)} onAdd={() => addLine('exitItems')} onRemove={(id) => removeLine('exitItems', id)} />
       </Section>
       </div>
@@ -431,39 +448,63 @@ export function DetailedUWPanel({ deal }: { deal: MarketDeal }) {
         </div>
       </section>
 
-      {/* Sample investor return */}
-      <div id="uw-investor" className="scroll-mt-28 border-b border-slate-100 p-4">
-        <h3 className="mb-2 text-base font-bold">Sample investor return</h3>
-        <div className="flex flex-wrap items-end gap-3">
-          <Money label="If an LP invests" v={inp.sampleInvestment} step={25_000} onChange={(v) => set({ sampleInvestment: v })} />
-          <div className="grid flex-1 grid-cols-2 gap-2 sm:grid-cols-4">
-            <Stat label="Total returned" value={usd(r.sampleReturn.totalReturned, { compact: true })} />
-            <Stat label="Profit" value={usd(r.sampleReturn.profit, { compact: true })} />
-            <Stat label="IRR" value={pct(r.sampleReturn.irr)} />
-            <Stat label="Equity multiple" value={`${r.sampleReturn.equityMultiple.toFixed(2)}x`} />
+      {/* Returns — a sample LP investor AND the GP/sponsor, side by side (owner #13) */}
+      <div id="uw-investor" className="scroll-mt-28 grid grid-cols-1 gap-4 border-b border-slate-100 p-4 lg:grid-cols-2">
+        <div className="rounded-lg border-2 border-emerald-200 bg-emerald-50/40 p-3">
+          <h3 className="mb-2 text-base font-bold text-emerald-800">Sample LP (investor) return</h3>
+          <div className="flex flex-wrap items-end gap-3">
+            <Money label="If an LP invests" v={inp.sampleInvestment} onChange={(v) => set({ sampleInvestment: v })} />
+            <div className="grid flex-1 grid-cols-2 gap-2">
+              <Stat label="Total returned" value={usd(r.sampleReturn.totalReturned, { compact: true })} />
+              <Stat label="Profit" value={usd(r.sampleReturn.profit, { compact: true })} />
+              <Stat label="IRR" value={pct(r.sampleReturn.irr)} />
+              <Stat label="Equity multiple" value={`${r.sampleReturn.equityMultiple.toFixed(2)}x`} />
+            </div>
           </div>
+          <p className="mt-1 text-[11px] text-slate-500">This LP rides the LP class pro-rata.</p>
         </div>
-        <p className="mt-1 text-[11px] text-slate-500">This LP rides the LP class pro-rata. (Powerpoint investor one-pagers generated from this come later.)</p>
+        <div className="rounded-lg border-2 border-violet-200 bg-violet-50/40 p-3">
+          <h3 className="mb-2 flex items-center gap-1.5 text-base font-bold text-violet-800">GP (sponsor) return <InfoTip k="r.promote" /></h3>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            <Stat label="GP co-invest" value={usd(r.gpEquity, { compact: true })} />
+            <Stat label="GP total profit" value={usd(r.gpProfit, { compact: true })} />
+            <Stat label="GP equity multiple" value={`${r.gpMultiple.toFixed(2)}x`} />
+            <Stat label="Acquisition fee" value={usd(r.acqFee, { compact: true })} />
+            <Stat label="Promote" value={pct(inp.promoteToGp)} />
+            <Stat label="GP co-invest %" value={pct(inp.gpCoinvestPct)} />
+          </div>
+          <p className="mt-1 text-[11px] text-slate-500">GP profit includes the promote (carried interest) above the LP hurdle, plus the GP&apos;s pro-rata on its co-invest. Acquisition fee is earned at close. (Full GP split across partners lives in <b>Team &amp; Raise → GP Roles &amp; Splits</b>.)</p>
+        </div>
       </div>
 
-      {/* Sources & uses + exit */}
-      <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2">
-        <div className="rounded-lg border-2 border-slate-200 bg-slate-50 p-3">
-          <h4 className="mb-1 text-xs font-bold uppercase tracking-wide text-slate-600">Sources &amp; Uses</h4>
-          <Line k="Purchase price" v={usd(inp.purchasePrice)} />
-          <Line k="Acq fee" v={usd(r.acqFee)} />
-          <Line k="Closing + capex + reserves" v={usd(r.totalUses - inp.purchasePrice - r.acqFee)} />
-          <Line k="Total uses" v={usd(r.totalUses)} bold />
-          <Line k="Debt at close" v={usd(r.debtAtClose)} />
-          <Line k="Equity required" v={usd(r.equityRequired)} bold />
+      {/* Sources & Uses — two side-by-side columns whose totals must tie (owner #15) */}
+      <div className="p-4">
+        <h4 className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-600">Sources &amp; Uses</h4>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="rounded-lg border-2 border-rose-200 bg-rose-50/50 p-3">
+            <h5 className="mb-1 text-[11px] font-bold uppercase tracking-wide text-rose-700">Uses</h5>
+            <Line k="Purchase price" v={usd(inp.purchasePrice)} />
+            <Line k="Acquisition fee" v={usd(r.acqFee)} />
+            <Line k="Closing, capex & reserves" v={usd(r.totalUses - inp.purchasePrice - r.acqFee)} />
+            <div className="mt-1 border-t border-rose-200 pt-1"><Line k="Total uses" v={usd(r.totalUses)} bold /></div>
+          </div>
+          <div className="rounded-lg border-2 border-emerald-200 bg-emerald-50/50 p-3">
+            <h5 className="mb-1 text-[11px] font-bold uppercase tracking-wide text-emerald-700">Sources</h5>
+            <Line k="Debt at close" v={usd(r.debtAtClose)} />
+            {inp.prefEquityEnabled && r.prefEquity > 0 && <Line k="Preferred equity" v={usd(r.prefEquity)} />}
+            <Line k="LP equity" v={usd(r.lpEquity)} />
+            <Line k="GP co-invest" v={usd(r.gpEquity)} />
+            <div className="mt-1 border-t border-emerald-200 pt-1"><Line k="Total sources" v={usd(r.debtAtClose + r.equityRequired)} bold /></div>
+          </div>
         </div>
-        <div className="rounded-lg border-2 border-slate-200 bg-slate-50 p-3">
-          <h4 className="mb-1 text-xs font-bold uppercase tracking-wide text-slate-600">Exit (Year {r.hold})</h4>
+        {/* Exit summary */}
+        <div className="mt-3 rounded-lg border-2 border-slate-200 bg-slate-50 p-3 sm:max-w-md">
+          <h5 className="mb-1 text-[11px] font-bold uppercase tracking-wide text-slate-600">Exit (Year {r.hold})</h5>
           <Line k="Forward NOI" v={usd(r.exitNOI)} />
           <Line k={`Sale @ ${pct(inp.exitCapRate)} cap`} v={usd(r.salePrice)} bold />
-          <Line k="Sale costs" v={`(${usd(r.saleCosts)})`} />
+          <Line k="Sale & exit costs" v={`(${usd(r.saleCosts)})`} />
           <Line k="Debt payoff" v={`(${usd(r.debtPayoffAtExit)})`} />
-          <Line k="Net sale proceeds" v={usd(r.netSaleProceeds)} bold />
+          <div className="mt-1 border-t border-slate-200 pt-1"><Line k="Net sale proceeds" v={usd(r.netSaleProceeds)} bold /></div>
         </div>
       </div>
 
@@ -545,7 +586,7 @@ const UW_SECTIONS: [string, string, string][] = [
 function SectionNav() {
   const go = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   return (
-    <div className="sticky top-14 z-10 flex flex-wrap items-center gap-1 border-b border-slate-200 bg-white/95 px-3 py-1.5 backdrop-blur">
+    <div className="sticky top-[68px] z-20 flex flex-wrap items-center gap-1 border-b border-slate-200 bg-white/95 px-3 py-1.5 backdrop-blur">
       {UW_SECTIONS.map(([id, label, color]) => (
         <button key={id} onClick={() => go(id)} className={`rounded-md px-2 py-0.5 text-xs font-semibold ${SECTION_COLOR[color].chip}`}>
           {label}
@@ -560,7 +601,7 @@ function Section({ id, title, info, color, children }: { id?: string; title: str
     <section id={id} className="scroll-mt-28">
       <div className={`flex items-center gap-1.5 px-4 py-2 ${SECTION_COLOR[color].header}`}>
         <h3 className="text-base font-bold text-white">{title}</h3>
-        {info && <span className="brightness-200"><InfoTip k={info} /></span>}
+        {info && <InfoTip k={info} variant="onColor" />}
       </div>
       <div className="p-4">{children}</div>
     </section>
@@ -635,6 +676,16 @@ function Toggle({ label, info, on, onToggle, children }: { label: string; info?:
         {info && <InfoTip k={info} />}
       </label>
       {on && <div className="border-t border-slate-100 p-3">{children}</div>}
+    </div>
+  );
+}
+
+function KpiGroup({ label, color, children }: { label: string; color: string; children: React.ReactNode }) {
+  const ring: Record<string, string> = { slate: 'border-slate-300', emerald: 'border-emerald-300', sky: 'border-sky-300', violet: 'border-violet-300' };
+  return (
+    <div className={`rounded-xl border-2 ${ring[color] ?? 'border-slate-300'} p-2`}>
+      <div className={`mb-1.5 px-1 text-[10px] font-bold uppercase tracking-wide ${SECTION_COLOR[color]?.chip ?? 'text-slate-500'} inline-block rounded`}>{label}</div>
+      <div className="grid grid-cols-2 gap-1.5">{children}</div>
     </div>
   );
 }

@@ -97,7 +97,7 @@ export function NapkinPanel({
   return (
     <section className="rounded-xl border border-slate-200 bg-white">
       {/* Sticky in-deal section nav (clickable) */}
-      <div className="sticky top-14 z-10 flex flex-wrap items-center gap-1 rounded-t-xl border-b border-slate-100 bg-white/95 px-3 py-2 backdrop-blur">
+      <div className="sticky top-[68px] z-20 flex flex-wrap items-center gap-1 rounded-t-xl border-b border-slate-100 bg-white/95 px-3 py-2 backdrop-blur">
         {/* Simple ⇄ Full toggle — the napkin is a gut-check by default */}
         <div className="flex rounded-lg border border-slate-300 p-0.5 text-xs font-medium">
           <button onClick={() => setView('simple')} className={`rounded-md px-2.5 py-1 ${view === 'simple' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'}`}>Simple</button>

@@ -15,12 +15,15 @@ export function InfoTip({
   what,
   app,
   className = '',
+  variant = 'default',
 }: {
   k?: string;
   title?: string;
   what?: string;
   app?: string;
   className?: string;
+  /** 'onColor' = white circle + dark "i", for use on solid-colored section headers (legible contrast) */
+  variant?: 'default' | 'onColor';
 }) {
   const [open, setOpen] = useState(false);
   const { learnTip } = useApp();
@@ -49,7 +52,11 @@ export function InfoTip({
           e.stopPropagation();
           setOpen((v) => !v);
         }}
-        className="grid h-4 w-4 place-items-center rounded-full border border-sky-600 bg-sky-600 text-[10px] font-bold leading-none text-white hover:bg-sky-700"
+        className={`grid h-4 w-4 place-items-center rounded-full text-[10px] font-bold leading-none ${
+          variant === 'onColor'
+            ? 'border border-white bg-white text-slate-800 hover:bg-slate-100'
+            : 'border border-sky-600 bg-sky-600 text-white hover:bg-sky-700'
+        }`}
       >
         i
       </button>
