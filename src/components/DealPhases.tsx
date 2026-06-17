@@ -12,9 +12,10 @@ import { LOIPanel } from '@/components/LOIPanel';
 import { C2CPanel, AMPanel } from '@/components/PhasePanels';
 import { DocumentsPanel } from '@/components/DocumentsPanel';
 import { DealPeoplePanel } from '@/components/DealPeoplePanel';
+import { DealTeamPanel } from '@/components/DealTeamPanel';
 import { PHASES, stageDef, stageIndex, type DealStage, type MarketDeal } from '@/lib/sim';
 
-type Tab = DealStage | 'docs';
+type Tab = DealStage | 'docs' | 'team';
 
 const PHASE_INFO: Record<DealStage, string> = {
   new: 'step.pick',
@@ -108,6 +109,17 @@ export function DealPhases({ deal, onOpenConversation, onPhaseChange }: { deal: 
               </button>
             );
           })}
+          {/* Always-available Team & Raise tab (GP splits, org chart, investor teaser) */}
+          {!terminal && (
+            <button
+              onClick={() => setPhase('team')}
+              className={`ml-1 flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition ${
+                phase === 'team' ? 'bg-violet-600 text-white shadow-sm' : 'text-slate-600 hover:bg-violet-100'
+              }`}
+            >
+              🤝 Team &amp; Raise
+            </button>
+          )}
           {/* Always-available Documents tab (the deal's central drive) */}
           <button
             onClick={() => setPhase('docs')}
@@ -121,7 +133,7 @@ export function DealPhases({ deal, onOpenConversation, onPhaseChange }: { deal: 
       </div>
 
       {/* Contextual "what is this step" helper (learn-as-you-go) */}
-      {phase !== 'docs' && !terminal && (
+      {phase !== 'docs' && phase !== 'team' && !terminal && (
         <div className="flex items-center gap-1.5 px-1 text-xs text-slate-500">
           <span className="font-medium text-slate-600">{stageDef(phase).label}</span>
           <InfoTip k={PHASE_INFO[phase]} />
@@ -135,6 +147,7 @@ export function DealPhases({ deal, onOpenConversation, onPhaseChange }: { deal: 
       {!terminal && phase === 'loi' && <LOIPanel deal={deal} />}
       {!terminal && phase === 'c2c' && <C2CPanel deal={deal} />}
       {!terminal && phase === 'am' && <AMPanel deal={deal} />}
+      {!terminal && phase === 'team' && <DealTeamPanel deal={deal} />}
       {phase === 'docs' && <DocumentsPanel deal={deal} />}
     </div>
   );

@@ -18,3 +18,4 @@ export * from './coachMessages';
 export * from './amCards';
 export * from './dealPipeline';
 export * from './brokerCalls';
+export * from './gpTeam';
