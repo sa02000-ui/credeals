@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useApp } from '@/lib/store';
+import { useDealLocal } from '@/lib/hooks/useDealLocal';
 import { InfoTip } from '@/components/InfoTip';
 import { StageEncounters } from '@/components/StageEncounters';
 import { scoreUW, getCoachMessage, buildNapkinScenarios } from '@/lib/sim';
@@ -52,16 +53,23 @@ export function NapkinPanel({
   const eff = { ...defaultOverrides(deal), ...ov };
   const r = analyzeDeal(deal, ov);
 
+  // The napkin defaults to a true gut-check (just the few core inputs). "Full analysis" reveals the
+  // current-financials column, financing, valuation table, and sensitivity grid (owner item 6).
+  const [view, setView] = useState<'simple' | 'full'>('simple');
+  // Light capex/unit estimate so the napkin compares the stabilized value to an all-in basis, not
+  // just the offer. Persisted per deal; also feeds the UW-aggressiveness signal.
+  const [capexPerUnit, setCapexPerUnit] = useDealLocal<number>('napkin-capex', deal.id, 7500);
+
   // UW aggressiveness (game mode): how far the player's assumptions push vs. asset-class consensus
   const uw = useMemo(
     () => scoreUW({
       rentVsMarket: eff.avgInPlaceRent > 0 ? eff.avgMarketRent / eff.avgInPlaceRent : 1,
       expenseRatio: eff.proformaExpenseRatio,
       exitCapRate: eff.stabilizedCapRate,
-      capexPerUnit: 7500,
+      capexPerUnit,
       vacancyStabilized: eff.stabilizedVacancy,
     }, deal.assetClass),
-    [eff.avgInPlaceRent, eff.avgMarketRent, eff.proformaExpenseRatio, eff.stabilizedCapRate, eff.stabilizedVacancy, deal.assetClass],
+    [eff.avgInPlaceRent, eff.avgMarketRent, eff.proformaExpenseRatio, eff.stabilizedCapRate, eff.stabilizedVacancy, deal.assetClass, capexPerUnit],
   );
   useEffect(() => {
     if (mode === 'game') updateDealDNA(deal.id, { uwScore: uw.score });
@@ -89,7 +97,12 @@ export function NapkinPanel({
     <section className="rounded-xl border border-slate-200 bg-white">
       {/* Sticky in-deal section nav (clickable) */}
       <div className="sticky top-14 z-10 flex flex-wrap items-center gap-1 rounded-t-xl border-b border-slate-100 bg-white/95 px-3 py-2 backdrop-blur">
-        {SECTIONS.map(([id, label]) => (
+        {/* Simple ⇄ Full toggle — the napkin is a gut-check by default */}
+        <div className="flex rounded-lg border border-slate-300 p-0.5 text-xs font-medium">
+          <button onClick={() => setView('simple')} className={`rounded-md px-2.5 py-1 ${view === 'simple' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'}`}>Simple</button>
+          <button onClick={() => setView('full')} className={`rounded-md px-2.5 py-1 ${view === 'full' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'}`}>Full analysis</button>
+        </div>
+        {view === 'full' && SECTIONS.map(([id, label]) => (
           <button
             key={id}
             onClick={() => go(id)}
@@ -171,38 +184,59 @@ export function NapkinPanel({
             </button>
           )}
         </div>
-        <Field label="Offer price" info="m.offerPrice" value={eff.offerPrice} step={100_000} onChange={(v) => set({ offerPrice: v })} money wide />
-        <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div className="rounded-lg border border-slate-200 p-3">
-            <div className="mb-2 text-xs font-semibold text-slate-600">Current (from financials)</div>
-            <div className="grid grid-cols-2 gap-x-4 gap-y-2">
-              <Field label="In-place rent /mo" info="m.inPlaceRent" value={eff.avgInPlaceRent} onChange={(v) => set({ avgInPlaceRent: v })} money />
-              <Field label={`Exp /${cfg.unitNoun}/yr`} info="m.expensePerUnit" value={eff.currentExpensePerUnit} step={100} onChange={(v) => set({ currentExpensePerUnit: v })} money />
-              <PctField label="Walk-in cap" info="m.walkInCap" value={eff.walkInCapRate} onChange={(v) => set({ walkInCapRate: v })} />
-              <PctField label="Vacancy" info="m.vacancy" value={eff.currentVacancy} onChange={(v) => set({ currentVacancy: v })} />
+        {view === 'simple' ? (
+          /* The napkin: a handful of inputs and an instant read on value vs. your all-in basis. */
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50/40 p-3">
+              <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-emerald-700">Your plan <InfoTip title="Napkin underwriting" what="A back-of-the-envelope test: at your target market rent, expense ratio, and exit cap, what is the stabilized property worth — and is that above what you'll have in it (offer + capex)? If yes, the deal pencils; if not, walk or sharpen your pencil." app="This is the quick gut-check. Switch to Full analysis for financing, the valuation table, and the sensitivity grid." /></div>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+                <Field label="Offer price" info="m.offerPrice" value={eff.offerPrice} step={100_000} onChange={(v) => set({ offerPrice: v })} money />
+                <Field label={`Capex /${cfg.unitNoun}`} value={capexPerUnit} step={500} onChange={setCapexPerUnit} money info="m.capex" />
+                <Field label="Market rent /mo" info="m.marketRent" value={eff.avgMarketRent} onChange={(v) => set({ avgMarketRent: v })} money />
+                <PctField label="Proforma exp ratio" info="m.expenseRatio" value={eff.proformaExpenseRatio} onChange={(v) => set({ proformaExpenseRatio: v })} />
+                <PctField label="Valuation cap" info="m.stabilizedCap" value={eff.stabilizedCapRate} onChange={(v) => set({ stabilizedCapRate: v })} />
+                <PctField label="Stabilized vacancy" info="m.vacancy" value={eff.stabilizedVacancy} onChange={(v) => set({ stabilizedVacancy: v })} />
+              </div>
             </div>
-            <div className="mt-2 rounded bg-slate-50 px-2 py-1 text-[11px] text-slate-600">
-              → Implied current expense ratio: <b>{pct(r.current.expenseRatio)}</b>
-            </div>
+            <SimpleResult r={r} offer={eff.offerPrice} capex={capexPerUnit * deal.unitCount} cap={eff.stabilizedCapRate} affordableRent={r.affordableRent} marketRent={eff.avgMarketRent} />
           </div>
-          <div className="rounded-lg border border-emerald-200 bg-emerald-50/40 p-3">
-            <div className="mb-2 text-xs font-semibold text-emerald-700">Proforma (your plan)</div>
-            <div className="grid grid-cols-2 gap-x-4 gap-y-2">
-              <Field label="Market rent /mo" info="m.marketRent" value={eff.avgMarketRent} onChange={(v) => set({ avgMarketRent: v })} money />
-              <PctField label="Stabilized vacancy" info="m.vacancy" value={eff.stabilizedVacancy} onChange={(v) => set({ stabilizedVacancy: v })} />
-              <PctField label="Proforma exp ratio" info="m.expenseRatio" value={eff.proformaExpenseRatio} onChange={(v) => set({ proformaExpenseRatio: v })} />
-              <PctField label="Valuation cap" info="m.stabilizedCap" value={eff.stabilizedCapRate} onChange={(v) => set({ stabilizedCapRate: v })} />
+        ) : (
+          <>
+            <Field label="Offer price" info="m.offerPrice" value={eff.offerPrice} step={100_000} onChange={(v) => set({ offerPrice: v })} money wide />
+            <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="rounded-lg border border-slate-200 p-3">
+                <div className="mb-2 text-xs font-semibold text-slate-600">Current (from financials)</div>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+                  <Field label="In-place rent /mo" info="m.inPlaceRent" value={eff.avgInPlaceRent} onChange={(v) => set({ avgInPlaceRent: v })} money />
+                  <Field label={`Exp /${cfg.unitNoun}/yr`} info="m.expensePerUnit" value={eff.currentExpensePerUnit} step={100} onChange={(v) => set({ currentExpensePerUnit: v })} money />
+                  <PctField label="Walk-in cap" info="m.walkInCap" value={eff.walkInCapRate} onChange={(v) => set({ walkInCapRate: v })} />
+                  <PctField label="Vacancy" info="m.vacancy" value={eff.currentVacancy} onChange={(v) => set({ currentVacancy: v })} />
+                </div>
+                <div className="mt-2 rounded bg-slate-50 px-2 py-1 text-[11px] text-slate-600">
+                  → Implied current expense ratio: <b>{pct(r.current.expenseRatio)}</b>
+                </div>
+              </div>
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50/40 p-3">
+                <div className="mb-2 text-xs font-semibold text-emerald-700">Proforma (your plan)</div>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+                  <Field label="Market rent /mo" info="m.marketRent" value={eff.avgMarketRent} onChange={(v) => set({ avgMarketRent: v })} money />
+                  <PctField label="Stabilized vacancy" info="m.vacancy" value={eff.stabilizedVacancy} onChange={(v) => set({ stabilizedVacancy: v })} />
+                  <PctField label="Proforma exp ratio" info="m.expenseRatio" value={eff.proformaExpenseRatio} onChange={(v) => set({ proformaExpenseRatio: v })} />
+                  <PctField label="Valuation cap" info="m.stabilizedCap" value={eff.stabilizedCapRate} onChange={(v) => set({ stabilizedCapRate: v })} />
+                </div>
+                <div className="mt-2 rounded bg-emerald-50 px-2 py-1 text-[11px] text-emerald-800">
+                  → Proforma value: <b>{usd(r.proforma.valueAtCap, { compact: true })}</b> at {pct(eff.stabilizedCapRate)} cap
+                </div>
+              </div>
             </div>
-            <div className="mt-2 rounded bg-emerald-50 px-2 py-1 text-[11px] text-emerald-800">
-              → Proforma value: <b>{usd(r.proforma.valueAtCap, { compact: true })}</b> at {pct(eff.stabilizedCapRate)} cap
-            </div>
-          </div>
-        </div>
+          </>
+        )}
 
         {/* UW aggressiveness band (game mode; hidden for the silent coaching profile) */}
         {mode === 'game' && coachingMode !== 'silent' && <UWBand uw={uw} />}
       </div>
 
+      {view === 'full' && (<>
       {/* Financing */}
       <div id="sec-financing" className="scroll-mt-36 border-b border-slate-100 p-4">
         <h3 className="mb-2 text-sm font-semibold">Financing</h3>
@@ -299,6 +333,7 @@ export function NapkinPanel({
 
       {/* Files */}
       <FilesSection dealId={deal.id} files={filesOf(deal.id)} addFiles={addFiles} />
+      </>)}
 
       {/* Decision */}
       <div id="sec-decision" className="scroll-mt-36 p-4">
@@ -454,6 +489,44 @@ function UWBand({ uw }: { uw: ReturnType<typeof scoreUW> }) {
       <div className="mt-1 flex justify-between text-[9px] uppercase tracking-wide text-slate-400">
         <span>Conservative</span><span>Market</span><span>Aggressive</span>
       </div>
+    </div>
+  );
+}
+
+function SimpleResult({ r, offer, capex, cap, affordableRent, marketRent }: { r: ReturnType<typeof analyzeDeal>; offer: number; capex: number; cap: number; affordableRent: number; marketRent: number }) {
+  const value = r.proforma.valueAtCap;
+  const allIn = offer + capex;
+  const delta = value - allIn;
+  const deltaPct = allIn > 0 ? delta / allIn : 0;
+  const pencils = delta >= 0;
+  return (
+    <div className={`rounded-lg border p-3 ${pencils ? 'border-emerald-300 bg-emerald-50/60' : 'border-amber-300 bg-amber-50/60'}`}>
+      <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-600">Does it pencil? <InfoTip k="m.affordability" /></div>
+      <div className={`mt-1 text-2xl font-bold tabular-nums ${pencils ? 'text-emerald-700' : 'text-amber-700'}`}>
+        {pencils ? '+' : ''}{usd(delta, { compact: true })}
+        <span className="ml-1 text-sm font-medium">({pencils ? '+' : ''}{pct(deltaPct)})</span>
+      </div>
+      <div className="text-[11px] text-slate-500">stabilized value vs. your all-in basis</div>
+      <div className="mt-2 space-y-1 text-sm tabular-nums">
+        <Line label={`Proforma NOI`} value={usd(r.proforma.noi)} />
+        <Line label={`Stabilized value @ ${pct(cap)} cap`} value={usd(value, { compact: true })} bold />
+        <Line label="Offer price" value={usd(offer, { compact: true })} />
+        <Line label="+ Capex" value={usd(capex, { compact: true })} />
+        <Line label="= All-in basis" value={usd(allIn, { compact: true })} bold />
+      </div>
+      <div className="mt-2 rounded bg-white/70 px-2 py-1 text-[11px] text-slate-600">
+        Local household can afford <b>{usd2(affordableRent)}</b>/mo · your rent {usd2(marketRent)} ·{' '}
+        <span className={marketRent <= affordableRent ? 'text-emerald-600' : 'text-amber-600'}>{marketRent <= affordableRent ? 'within reach' : 'above affordability'}</span>
+      </div>
+    </div>
+  );
+}
+
+function Line({ label, value, bold }: { label: string; value: string; bold?: boolean }) {
+  return (
+    <div className="flex items-baseline justify-between gap-2">
+      <span className={`text-slate-500 ${bold ? 'font-semibold text-slate-700' : ''}`}>{label}</span>
+      <span className={bold ? 'font-bold text-slate-900' : 'text-slate-700'}>{value}</span>
     </div>
   );
 }

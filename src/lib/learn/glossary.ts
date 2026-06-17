@@ -81,6 +81,7 @@ export const GLOSSARY: Record<string, LearnEntry> = {
   'm.noi': { title: 'Net Operating Income (NOI)', what: 'Effective gross income minus operating expenses — before debt service and capital items. The single most important number; value is NOI ÷ cap rate.' },
   'm.dscr': { title: 'Debt Service Coverage Ratio (DSCR)', what: 'NOI ÷ annual debt payments. Lenders require a cushion — usually ≥1.25x for multifamily, ≥1.50x for net-lease retail. Below it, the loan shrinks or dies.' },
   'm.affordability': { title: 'Affordability', what: 'The "30% rule": households can sustainably pay about 30% of gross income on rent. If your proforma rent exceeds local affordability, those increases may not stick.' },
+  'm.capex': { title: 'Capital expenditures (capex)', what: 'One-time money you put in beyond the purchase price — renovations, deferred maintenance, roofs, amenities. Add it to your offer to get your true "all-in basis": the stabilized value has to clear that, not just the price, for the deal to pencil.' },
 
   // --- Financing ---
   'f.ltv': { title: 'Loan-to-Value (LTV)', what: 'Loan amount ÷ property value. Higher leverage boosts returns but raises risk and lowers DSCR. Agency multifamily debt typically tops out around 65–75% LTV.' },
