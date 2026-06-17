@@ -148,3 +148,14 @@ describe('computeExitOutcome', () => {
     expect(out.actualExitCap).toBeGreaterThan(out.projectedExitCap); // tough market widens caps
   });
 });
+
+describe('debtPayoffByLien (exit payoff breakout)', () => {
+  it('per-lien payoffs sum to the total debt payoff at exit', () => {
+    const inp = { ...base(), suppEnabled: true, suppAmount: 500_000, suppRate: 0.08, suppFundYear: 1, suppAmortMonths: 360 };
+    const r = runDetailedUW(inp);
+    const sum = r.debtPayoffByLien.reduce((a, x) => a + x.amount, 0);
+    expect(sum).toBeCloseTo(r.debtPayoffAtExit, 2);
+    expect(r.debtPayoffByLien.length).toBeGreaterThanOrEqual(2); // senior + supplemental
+    expect(r.debtPayoffByLien.some((x) => x.label === 'Supplemental')).toBe(true);
+  });
+});

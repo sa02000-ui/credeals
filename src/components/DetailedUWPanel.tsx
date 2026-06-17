@@ -503,7 +503,11 @@ export function DetailedUWPanel({ deal }: { deal: MarketDeal }) {
           <Line k="Forward NOI" v={usd(r.exitNOI)} />
           <Line k={`Sale @ ${pct(inp.exitCapRate)} cap`} v={usd(r.salePrice)} bold />
           <Line k="Sale & exit costs" v={`(${usd(r.saleCosts)})`} />
-          <Line k="Debt payoff" v={`(${usd(r.debtPayoffAtExit)})`} />
+          {/* Debt payoff broken out per lien (owner #16) */}
+          {r.debtPayoffByLien.length > 1
+            ? r.debtPayoffByLien.map((d) => <Line key={d.label} k={`Payoff — ${d.label}`} v={`(${usd(d.amount)})`} muted />)
+            : <Line k="Debt payoff" v={`(${usd(r.debtPayoffAtExit)})`} />}
+          {r.debtPayoffByLien.length > 1 && <Line k="Total debt payoff" v={`(${usd(r.debtPayoffAtExit)})`} />}
           <div className="mt-1 border-t border-slate-200 pt-1"><Line k="Net sale proceeds" v={usd(r.netSaleProceeds)} bold /></div>
         </div>
       </div>
@@ -878,10 +882,10 @@ function StmtLineRow({
   );
 }
 
-function Line({ k, v, bold }: { k: string; v: string; bold?: boolean }) {
+function Line({ k, v, bold, muted }: { k: string; v: string; bold?: boolean; muted?: boolean }) {
   return (
-    <div className={`flex justify-between border-b border-slate-100 py-0.5 text-xs ${bold ? 'font-semibold text-slate-800' : 'text-slate-600'}`}>
-      <span>{k}</span><span className="tabular-nums">{v}</span>
+    <div className={`flex justify-between border-b border-slate-100 py-0.5 text-xs ${bold ? 'font-semibold text-slate-800' : muted ? 'text-slate-400' : 'text-slate-600'}`}>
+      <span className={muted ? 'pl-2' : ''}>{k}</span><span className="tabular-nums">{v}</span>
     </div>
   );
 }

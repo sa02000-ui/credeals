@@ -209,6 +209,8 @@ export interface DetailedUWResult {
   salePrice: number;
   saleCosts: number;
   debtPayoffAtExit: number;
+  /** exit debt payoff broken out per lien (senior / supplemental / seller / refi) */
+  debtPayoffByLien: { label: string; amount: number }[];
   netSaleProceeds: number;
 
   projectIRR: number;
@@ -432,6 +434,10 @@ export function runDetailedUW(i: DetailedUWInputs): DetailedUWResult {
   const salePrice = i.exitCapRate > 0 ? exitNOI / i.exitCapRate : 0;
   const saleCosts = salePrice * clamp01(i.saleCostPct) + sumLines(i.exitItems, { units, price, loan: seniorLoan, egi: 0 });
   const debtPayoffAtExit = tranches.reduce((a, t) => a + tranchePayoff(t, holdMonths), 0);
+  const LIEN_LABEL: Record<TrancheKind, string> = { senior: 'Senior loan', supp: 'Supplemental', seller: 'Seller note', refi: 'Refinance loan' };
+  const debtPayoffByLien = tranches
+    .map((t) => ({ label: LIEN_LABEL[t.kind], amount: tranchePayoff(t, holdMonths) }))
+    .filter((x) => x.amount > 0);
   const netSaleProceeds = salePrice - saleCosts - debtPayoffAtExit;
 
   // --- Distributable cash per year ---
@@ -586,6 +592,7 @@ export function runDetailedUW(i: DetailedUWInputs): DetailedUWResult {
     salePrice,
     saleCosts,
     debtPayoffAtExit,
+    debtPayoffByLien,
     netSaleProceeds,
     projectIRR,
     leveredIRR,
