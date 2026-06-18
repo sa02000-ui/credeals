@@ -218,6 +218,10 @@ export interface LOITerms {
   ddDays: number; // shorter pleases seller
   closeDays: number; // shorter pleases seller
   financingContingency: boolean; // removing it pleases seller
+  /** earnest money goes hard at PSA (non-refundable) — strong certainty-of-close signal */
+  nonRefundableEmd?: boolean;
+  /** who pays title insurance — buyer paying pleases the seller */
+  titlePayer?: 'seller' | 'buyer' | 'split';
 }
 
 export interface NegInput {
@@ -257,7 +261,11 @@ export function negotiateLOI(i: NegInput): NegResult {
   const ddScore = clamp((45 - t.ddDays) / 30, 0, 1);
   const closeScore = clamp((75 - t.closeDays) / 45, 0, 1);
   const contScore = t.financingContingency ? 0.35 : 1;
-  const score = priceScore * 0.5 + emdScore * 0.1 + ddScore * 0.12 + closeScore * 0.08 + contScore * 0.2 + i.responsiveness * 0.05;
+  const hardScore = t.nonRefundableEmd ? 1 : 0.4; // EMD going hard at PSA = strong certainty of close
+  const titleScore = t.titlePayer === 'buyer' ? 1 : t.titlePayer === 'split' ? 0.6 : 0.3;
+  const score =
+    priceScore * 0.46 + emdScore * 0.08 + ddScore * 0.1 + closeScore * 0.06 + contScore * 0.16 +
+    hardScore * 0.1 + titleScore * 0.05 + i.responsiveness * 0.05;
 
   const gapBelow = (reservationPrice - t.price) / i.askPrice;
   const insulting = gapBelow > 0.06 && flex < 0.45;
@@ -282,13 +290,17 @@ export function negotiateLOI(i: NegInput): NegResult {
     ddDays: Math.min(t.ddDays, 30),
     closeDays: Math.min(t.closeDays, 45),
     financingContingency: false,
+    nonRefundableEmd: true,
+    titlePayer: t.titlePayer === 'seller' ? 'split' : t.titlePayer ?? 'split',
   };
   const changes: string[] = [];
   if (counter.price > t.price) changes.push(`raise price to ${fmt(counter.price)}`);
   if (counter.emdPct > t.emdPct + 1e-6) changes.push(`increase earnest money to ${(counter.emdPct * 100).toFixed(1)}%`);
+  if (!t.nonRefundableEmd) changes.push('make the earnest money non-refundable at PSA');
   if (counter.ddDays < t.ddDays) changes.push(`shorten due diligence to ${counter.ddDays} days`);
   if (counter.closeDays < t.closeDays) changes.push(`close within ${counter.closeDays} days`);
   if (t.financingContingency) changes.push('drop the financing contingency');
+  if (t.titlePayer === 'seller') changes.push('split the title insurance cost');
   if (changes.length === 0) changes.push('hold firm on current terms');
 
   return {

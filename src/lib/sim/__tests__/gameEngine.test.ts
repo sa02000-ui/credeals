@@ -53,6 +53,13 @@ describe('negotiateLOI', () => {
     const slow = negotiateLOI({ terms: strong, askPrice: 10_000_000, seller: seller(0.4), market: 'hot', brokerRep: 50, responsiveness: 0, round: 2, competingPressure: 0.2 });
     expect(slow.competingPressure).toBeGreaterThan(fast.competingPressure);
   });
+  it('counter demands include hardening the EMD and splitting title when those terms are soft', () => {
+    const weak = { price: 9_200_000, emdPct: 0.005, ddDays: 60, closeDays: 90, financingContingency: true, nonRefundableEmd: false, titlePayer: 'seller' as const };
+    const r = negotiateLOI({ terms: weak, askPrice: 10_000_000, seller: seller(0.6, 0.7), market: 'tough', brokerRep: 50, responsiveness: 1, round: 1, competingPressure: 0 });
+    expect(r.outcome).toBe('counter');
+    expect(r.changes).toContain('make the earnest money non-refundable at PSA');
+    expect(r.changes).toContain('split the title insurance cost');
+  });
 });
 
 describe('resolveClosing', () => {
