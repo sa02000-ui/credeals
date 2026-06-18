@@ -11,6 +11,24 @@ export interface LookupSource {
   real: boolean;
 }
 
+/** Census-tract housing/market profile (area-level, not the specific parcel). */
+export interface AreaProfile {
+  medianRent: number | null;
+  medianHomeValue: number | null;
+  medianYearBuilt: number | null;
+  pctRenter: number | null; // 0..1
+  pctMultifamily: number | null; // share of 5+ unit structures, 0..1
+  predominantStructure: string | null; // 'Single-family' | '2–4 units' | '5+ units (multifamily)'
+}
+
+/** Best-effort building facts for the specific parcel from OpenStreetMap (often sparse in the US). */
+export interface BuildingInfo {
+  type: string | null; // OSM building tag (apartments, house, commercial, retail…)
+  levels: number | null;
+  units: number | null;
+  name: string | null;
+}
+
 export interface PropertyLookup {
   ok: boolean;
   query: string;
@@ -24,6 +42,8 @@ export interface PropertyLookup {
   medianHouseholdIncome: number | null;
   population: number | null;
   floodZone: string | null;
+  area?: AreaProfile;
+  building?: BuildingInfo | null;
   sources: LookupSource[];
   note?: string;
 }
@@ -60,25 +80,100 @@ async function geocode(address: string): Promise<Geo | null> {
   };
 }
 
-async function acs(t: Geo['tract']): Promise<{ income: number | null; population: number | null }> {
+// ACS sentinel values for "not available" are large negatives (e.g. -666666666); treat as null.
+const acsNum = (v: unknown): number | null => {
+  const n = Number(v);
+  return Number.isFinite(n) && n > 0 ? n : null;
+};
+
+// Variable order must match the parsing below.
+const ACS_VARS = [
+  'B19013_001E', // 0 median household income
+  'B01003_001E', // 1 tract population
+  'B25064_001E', // 2 median gross rent
+  'B25077_001E', // 3 median home value
+  'B25035_001E', // 4 median year structure built
+  'B25003_001E', // 5 occupied units (total)
+  'B25003_003E', // 6 renter-occupied units
+  'B25024_001E', // 7 structures (total)
+  'B25024_002E', // 8 1-unit detached
+  'B25024_003E', // 9 1-unit attached
+  'B25024_004E', // 10 2 units
+  'B25024_005E', // 11 3-4 units
+  'B25024_006E', // 12 5-9 units
+  'B25024_007E', // 13 10-19 units
+  'B25024_008E', // 14 20-49 units
+  'B25024_009E', // 15 50+ units
+] as const;
+
+async function acs(t: Geo['tract']): Promise<{ income: number | null; population: number | null; area: AreaProfile | null }> {
   const key = process.env.CENSUS_API_KEY;
-  if (!key || !t.tract) return { income: null, population: null };
+  if (!key || !t.tract) return { income: null, population: null, area: null };
   try {
     const url =
-      `https://api.census.gov/data/2022/acs/acs5?get=B19013_001E,B01003_001E` +
+      `https://api.census.gov/data/2022/acs/acs5?get=${ACS_VARS.join(',')}` +
       `&for=tract:${t.tract}&in=state:${t.state}+county:${t.county}&key=${key}`;
     const res = await fetch(url, { signal: AbortSignal.timeout(12000) });
     const j = await res.json();
-    const row = j?.[1];
-    if (!row) return { income: null, population: null };
-    const income = Number(row[0]);
-    const population = Number(row[1]);
+    const row: unknown[] | undefined = j?.[1];
+    if (!row) return { income: null, population: null, area: null };
+
+    const income = acsNum(row[0]);
+    const population = acsNum(row[1]);
+    const occupied = acsNum(row[5]);
+    const renter = acsNum(row[6]);
+    const total = acsNum(row[7]) ?? 0;
+    const singleFamily = (acsNum(row[8]) ?? 0) + (acsNum(row[9]) ?? 0);
+    const twoToFour = (acsNum(row[10]) ?? 0) + (acsNum(row[11]) ?? 0);
+    const fivePlus = (acsNum(row[12]) ?? 0) + (acsNum(row[13]) ?? 0) + (acsNum(row[14]) ?? 0) + (acsNum(row[15]) ?? 0);
+
+    let predominantStructure: string | null = null;
+    if (total > 0) {
+      const max = Math.max(singleFamily, twoToFour, fivePlus);
+      predominantStructure = max === fivePlus ? '5+ units (multifamily)' : max === twoToFour ? '2–4 units' : 'Single-family';
+    }
+
+    const area: AreaProfile = {
+      medianRent: acsNum(row[2]),
+      medianHomeValue: acsNum(row[3]),
+      medianYearBuilt: acsNum(row[4]),
+      pctRenter: occupied && renter != null ? renter / occupied : null,
+      pctMultifamily: total > 0 ? fivePlus / total : null,
+      predominantStructure,
+    };
+    return { income, population, area };
+  } catch {
+    return { income: null, population: null, area: null };
+  }
+}
+
+/** Best-effort building facts from OpenStreetMap (Overpass). Sparse in the US; returns null on miss. */
+async function buildingInfo(lat: number, lon: number): Promise<BuildingInfo | null> {
+  try {
+    const q = `[out:json][timeout:5];(way["building"](around:35,${lat},${lon});relation["building"](around:35,${lat},${lon}););out tags 8;`;
+    const res = await fetch('https://overpass-api.de/api/interpreter', {
+      method: 'POST',
+      body: q,
+      signal: AbortSignal.timeout(7000),
+    });
+    const j = await res.json();
+    const els: { tags?: Record<string, string> }[] = j?.elements ?? [];
+    // prefer the richest-tagged building (most keys)
+    const best = els
+      .filter((e) => e.tags?.building)
+      .sort((a, b) => Object.keys(b.tags ?? {}).length - Object.keys(a.tags ?? {}).length)[0];
+    if (!best?.tags) return null;
+    const tg = best.tags;
+    const lv = Number(tg['building:levels']);
+    const un = Number(tg['building:units'] ?? tg['residential:units'] ?? tg['building:flats']);
     return {
-      income: income > 0 ? income : null,
-      population: population > 0 ? population : null,
+      type: tg.building && tg.building !== 'yes' ? tg.building : (tg.amenity ?? tg.shop ?? null),
+      levels: Number.isFinite(lv) && lv > 0 ? lv : null,
+      units: Number.isFinite(un) && un > 0 ? un : null,
+      name: tg.name ?? null,
     };
   } catch {
-    return { income: null, population: null };
+    return null;
   }
 }
 
@@ -116,7 +211,11 @@ export async function lookupProperty(address: string): Promise<PropertyLookup> {
       note: 'Address not found. Try a full street address (e.g. "123 Main St, City, ST").',
     };
   }
-  const [acsData, flood] = await Promise.all([acs(geo.tract), floodZone(geo.lat, geo.lon)]);
+  const [acsData, flood, building] = await Promise.all([
+    acs(geo.tract),
+    floodZone(geo.lat, geo.lon),
+    buildingInfo(geo.lat, geo.lon),
+  ]);
   const keyMissing = !process.env.CENSUS_API_KEY;
 
   const sources: LookupSource[] = [
@@ -149,7 +248,9 @@ export async function lookupProperty(address: string): Promise<PropertyLookup> {
     medianHouseholdIncome: acsData.income,
     population: acsData.population,
     floodZone: flood,
+    area: acsData.area ?? undefined,
+    building,
     sources,
-    note: keyMissing ? 'Add a free CENSUS_API_KEY to enable income/population.' : undefined,
+    note: keyMissing ? 'Add a free CENSUS_API_KEY to enable income/population & the area housing profile.' : undefined,
   };
 }

@@ -2,16 +2,35 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { analyzeDeal, pct, usd, usd2, type MarketDeal } from '@/lib/sim';
+import { analyzeDeal, pct, usd, usd2, num, type MarketDeal } from '@/lib/sim';
 import { readCookieSession } from '@/lib/supabase/token';
+import { PropertyMap } from '@/components/PropertyMap';
 
+interface AreaProfile {
+  medianRent: number | null;
+  medianHomeValue: number | null;
+  medianYearBuilt: number | null;
+  pctRenter: number | null;
+  pctMultifamily: number | null;
+  predominantStructure: string | null;
+}
+interface BuildingInfo {
+  type: string | null;
+  levels: number | null;
+  units: number | null;
+  name: string | null;
+}
 interface LookupResult {
   ok: boolean;
   matchedAddress?: string;
   city?: string;
   state?: string;
+  lat?: number;
+  lon?: number;
   medianHouseholdIncome: number | null;
   floodZone: string | null;
+  area?: AreaProfile;
+  building?: BuildingInfo | null;
   sources: { label: string; value: string; source: string; real: boolean }[];
   note?: string;
 }
@@ -158,17 +177,59 @@ export default function Landing() {
             <section className="rounded-xl bg-white p-4 text-slate-900 shadow-lg">
               <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-violet-700">✨ AI Enhanced Data</div>
               <div className="mb-3 text-sm font-semibold">{result.matchedAddress}</div>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                {result.sources.map((s) => (
-                  <div key={s.label} className="rounded-md border border-slate-200 px-2 py-1.5">
-                    <div className="text-[10px] uppercase tracking-wide text-slate-400">{s.label}</div>
-                    <div className={`text-sm font-semibold ${s.real ? 'text-slate-800' : 'text-amber-600'}`}>{s.value}</div>
-                    <div className="mt-0.5 text-[9px] text-slate-400">src: {s.source}{s.real ? '' : ' ·est'}</div>
-                  </div>
-                ))}
+              {/* Map on one side, location intelligence on the other */}
+              <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+                {result.lat != null && result.lon != null ? (
+                  <PropertyMap lat={result.lat} lon={result.lon} label={result.matchedAddress} />
+                ) : (
+                  <div className="grid min-h-[240px] place-items-center rounded-lg bg-slate-100 text-xs text-slate-400">Map unavailable for this address</div>
+                )}
+                <div className="grid grid-cols-2 gap-2 self-start">
+                  {result.sources.map((s) => (
+                    <div key={s.label} className="rounded-md border border-slate-200 px-2 py-1.5">
+                      <div className="text-[10px] uppercase tracking-wide text-slate-400">{s.label}</div>
+                      <div className={`text-sm font-semibold ${s.real ? 'text-slate-800' : 'text-amber-600'}`}>{s.value}</div>
+                      <div className="mt-0.5 text-[9px] text-slate-400">src: {s.source}{s.real ? '' : ' ·est'}</div>
+                    </div>
+                  ))}
+                </div>
               </div>
               {result.note && <p className="mt-2 text-[11px] text-slate-500">{result.note}</p>}
             </section>
+
+            {/* Property & area profile — what's publicly knowable about the building + its census tract */}
+            {(result.building || result.area) && (
+              <section className="rounded-xl bg-white p-4 text-slate-900 shadow-lg">
+                <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-violet-700">🏢 Property &amp; area profile</div>
+
+                {result.building && (result.building.type || result.building.units || result.building.levels) && (
+                  <div className="mb-3">
+                    <div className="mb-1 text-[11px] font-semibold text-slate-600">This building <span className="font-normal text-slate-400">· OpenStreetMap</span></div>
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                      {result.building.type && <Fact label="Type" value={titleCase(result.building.type)} />}
+                      {result.building.units != null && <Fact label="Units" value={num(result.building.units)} />}
+                      {result.building.levels != null && <Fact label="Stories" value={String(result.building.levels)} />}
+                      {result.building.name && <Fact label="Name" value={result.building.name} />}
+                    </div>
+                  </div>
+                )}
+
+                {result.area && (
+                  <div>
+                    <div className="mb-1 text-[11px] font-semibold text-slate-600">Area profile <span className="font-normal text-slate-400">· Census tract (ACS)</span></div>
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                      {result.area.predominantStructure && <Fact label="Predominant housing" value={result.area.predominantStructure} />}
+                      {result.area.pctMultifamily != null && <Fact label="In 5+ unit buildings" value={pct(result.area.pctMultifamily, 0)} />}
+                      {result.area.medianYearBuilt != null && <Fact label="Typical year built" value={String(result.area.medianYearBuilt)} />}
+                      {result.area.medianRent != null && <Fact label="Median rent" value={`${usd(result.area.medianRent)}/mo`} />}
+                      {result.area.medianHomeValue != null && <Fact label="Median value" value={usd(result.area.medianHomeValue, { compact: true })} />}
+                      {result.area.pctRenter != null && <Fact label="Renter-occupied" value={pct(result.area.pctRenter, 0)} />}
+                    </div>
+                  </div>
+                )}
+                <p className="mt-2 text-[11px] text-slate-500">Area figures are census-tract aggregates (the neighborhood), not this exact parcel. Building-specific specs (true unit count, construction type, year built) come from the offering memorandum or county assessor.</p>
+              </section>
+            )}
 
             <section className="rounded-xl bg-white p-4 text-slate-900 shadow-lg">
               <div className="mb-2 text-sm font-semibold">Instant napkin</div>
@@ -243,6 +304,19 @@ function Pct({ label, value, onChange }: { label: string; value: number; onChang
       </div>
     </label>
   );
+}
+
+function Fact({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md border border-slate-200 px-2 py-1.5">
+      <div className="text-[10px] uppercase tracking-wide text-slate-400">{label}</div>
+      <div className="text-sm font-semibold text-slate-800">{value}</div>
+    </div>
+  );
+}
+
+function titleCase(s: string): string {
+  return s.replace(/[_-]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 function Stat({ label, value, tone }: { label: string; value: string; tone?: 'good' | 'bad' }) {
