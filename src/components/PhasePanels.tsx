@@ -127,10 +127,11 @@ interface C2CState {
 }
 
 export function C2CPanel({ deal }: { deal: MarketDeal }) {
-  const { filesOf, addFiles, peopleOf, mode } = useApp();
+  const { filesOf, addFiles, peopleOf, mode, setStatus, statusOf } = useApp();
   const files = filesOf(deal.id);
   const psa = files.find((f) => f.kind === 'PSA');
   const people = peopleOf(deal.id);
+  const closed = statusOf(deal.id) === 'am';
 
   const [state, setState] = useDealLocal<C2CState>('c2c', deal.id, { startDate: new Date().toISOString().slice(0, 10), overrides: {} });
   const [filter, setFilter] = useState<Workstream | 'All'>('All');
@@ -308,6 +309,32 @@ export function C2CPanel({ deal }: { deal: MarketDeal }) {
         </table>
       </div>
       {people.length === 0 && <p className="mt-2 text-[11px] text-slate-400">Tip: add partners/teammates in “👥 People &amp; access” above to assign them as task leads.</p>}
+
+      {/* Advance to Asset Management. In game mode the decision deck above closes the deal; in Live
+          mode there's no deck, so this is how you move a closed deal into AM. */}
+      {mode !== 'game' && (
+        <div className="mt-4 rounded-xl border-2 border-emerald-200 bg-emerald-50/50 p-4">
+          {closed ? (
+            <div className="text-sm font-semibold text-emerald-800">✅ Closed — this deal is in Asset Management. Open the <b>AM</b> tab above to operate it.</div>
+          ) : (
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="text-sm font-semibold text-emerald-800">Closed and funded?</div>
+                <div className="text-xs text-emerald-700">
+                  Once you’ve closed and taken title, move the deal into Asset Management.
+                  {!state.overrides['close']?.done && <span className="text-amber-700"> (You haven’t checked off “Close / distribute funds” yet — that’s fine, you can still proceed.)</span>}
+                </div>
+              </div>
+              <button
+                onClick={() => setStatus(deal.id, 'am')}
+                className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
+              >
+                ✅ Mark closed → Asset Management
+              </button>
+            </div>
+          )}
+        </div>
+      )}
     </PhaseShell>
   );
 }
