@@ -8,6 +8,9 @@ export async function GET(request: Request) {
   if (!address) {
     return NextResponse.json({ ok: false, note: 'address required' }, { status: 400 });
   }
+  if (address.length > 200) {
+    return NextResponse.json({ ok: false, note: 'address too long' }, { status: 400 });
+  }
   try {
     const result = await lookupProperty(address);
     return NextResponse.json(result);

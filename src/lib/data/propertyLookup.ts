@@ -198,7 +198,25 @@ function floodLabel(zone: string | null): string {
   return `Zone ${zone}`;
 }
 
+// Short-TTL in-memory cache so repeated lookups of the same address don't re-fan-out to the external
+// APIs (helps with latency + third-party quota / abuse). Per-instance only (serverless), which is fine.
+const LOOKUP_CACHE = new Map<string, { at: number; result: PropertyLookup }>();
+const LOOKUP_TTL = 10 * 60 * 1000; // 10 min
+const LOOKUP_MAX = 500;
+
 export async function lookupProperty(address: string): Promise<PropertyLookup> {
+  const key = address.trim().toLowerCase();
+  const hit = LOOKUP_CACHE.get(key);
+  if (hit && Date.now() - hit.at < LOOKUP_TTL) return hit.result;
+  const result = await lookupPropertyCore(address);
+  if (result.ok) {
+    if (LOOKUP_CACHE.size >= LOOKUP_MAX) LOOKUP_CACHE.clear();
+    LOOKUP_CACHE.set(key, { at: Date.now(), result });
+  }
+  return result;
+}
+
+async function lookupPropertyCore(address: string): Promise<PropertyLookup> {
   const geo = await geocode(address);
   if (!geo) {
     return {

@@ -44,7 +44,8 @@ export async function updateSession(request: NextRequest) {
     path === '/' ||
     path.startsWith('/login') ||
     path.startsWith('/auth') ||
-    path.startsWith('/api/lookup');
+    path.startsWith('/api/lookup') ||
+    path.startsWith('/api/settings'); // public feature flags (whitelisted keys only) — used by the landing
   if (!user && !isPublic) {
     const url = request.nextUrl.clone();
     url.pathname = '/login';

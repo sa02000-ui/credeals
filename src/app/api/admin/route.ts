@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import { requireAdmin, serviceClient } from '@/lib/supabase/admin';
 
+/** Feature-flag keys an admin may write into app_settings (mirrors the public read whitelist). */
+const ALLOWED_SETTING_KEYS = ['gameEnabled'];
+
 /**
  * Admin-only operations that need the service role (bypass RLS / auth-admin API). Every call
  * verifies the caller is an admin first.
@@ -78,6 +81,9 @@ export async function POST(request: Request) {
       case 'set-setting': {
         const { key, value } = body as { key?: string; value?: unknown };
         if (!key) return bad('key required');
+        // Only known feature-flag keys may be written, so app_settings can't be used as an
+        // arbitrary (and publicly-readable, via /api/settings) key/value store.
+        if (!ALLOWED_SETTING_KEYS.includes(key)) return bad(`unknown setting key: ${key}`);
         const { error } = await sb.from('app_settings').upsert({ key, value, updated_at: new Date().toISOString() } as never);
         if (error) {
           // app_settings table not created yet (migration 0003) — fall back to a hidden row in
