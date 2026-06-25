@@ -102,8 +102,10 @@ export interface DscrOutput {
 }
 
 export function pmt(ratePerPeriod: number, nper: number, pv: number): number {
-  if (ratePerPeriod === 0) return pv / nper;
-  return (pv * ratePerPeriod) / (1 - Math.pow(1 + ratePerPeriod, -nper));
+  // Guard the amortization period: 0/NaN months would divide by zero → Infinity payment.
+  const n = Number.isFinite(nper) && nper >= 1 ? nper : 1;
+  if (ratePerPeriod === 0) return pv / n;
+  return (pv * ratePerPeriod) / (1 - Math.pow(1 + ratePerPeriod, -n));
 }
 
 export const DSCR_LENDING_THRESHOLD = 1.25;

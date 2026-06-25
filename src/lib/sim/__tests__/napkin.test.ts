@@ -40,3 +40,11 @@ describe('computeScenario (napkin)', () => {
     expect(z.valueAtCap).toBe(0);
   });
 });
+
+describe('pmt guard', () => {
+  it('returns a finite payment even with 0 / NaN periods', () => {
+    expect(Number.isFinite(pmt(0.005, 0, 1_000_000))).toBe(true);
+    expect(Number.isFinite(pmt(0.005, Number.NaN, 1_000_000))).toBe(true);
+    expect(Number.isFinite(pmt(0, 0, 1_000_000))).toBe(true);
+  });
+});

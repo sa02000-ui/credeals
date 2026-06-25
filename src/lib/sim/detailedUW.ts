@@ -302,6 +302,10 @@ function trancheDS(t: Tranche, globalMonth: number): number {
 /** Clamp a fraction into [0,1] (NaN → 0) so bad inputs can't silently produce nonsense. */
 const clamp01 = (x: number): number => (Number.isFinite(x) ? Math.max(0, Math.min(1, x)) : 0);
 const nonNeg = (x: number): number => (Number.isFinite(x) && x > 0 ? x : 0);
+// Amortization period must be ≥ 1 month or pmt() divides by zero → Infinity debt service.
+const posMonths = (x: number, d = 360): number => (Number.isFinite(x) && x >= 1 ? Math.round(x) : d);
+const nonNegInt = (x: number): number => (Number.isFinite(x) && x > 0 ? Math.round(x) : 0);
+const clampInt = (x: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, Number.isFinite(x) ? Math.round(x) : lo));
 
 export function runDetailedUW(i: DetailedUWInputs): DetailedUWResult {
   const hold = Math.max(1, Math.min(12, Math.round(i.holdYears)));
@@ -363,34 +367,38 @@ export function runDetailedUW(i: DetailedUWInputs): DetailedUWResult {
 
   // --- Debt tranches ---
   const holdMonths = hold * 12;
-  const refiMonth = i.refiEnabled ? (i.refiYear - 1) * 12 + 1 : 0;
+  const refiYr = i.refiEnabled ? clampInt(i.refiYear, 1, hold) : 0;
+  const refiMonth = i.refiEnabled ? (refiYr - 1) * 12 + 1 : 0;
   const tranches: Tranche[] = [];
   const seniorEnd = i.refiEnabled ? refiMonth - 1 : holdMonths;
-  const senior: Tranche = { kind: 'senior', amount: seniorLoan, rate: i.interestRate, amortMonths: i.amortMonths, ioMonths: i.ioMonths, startMonth: 1, endMonth: seniorEnd };
+  const senior: Tranche = { kind: 'senior', amount: seniorLoan, rate: i.interestRate, amortMonths: posMonths(i.amortMonths), ioMonths: nonNegInt(i.ioMonths), startMonth: 1, endMonth: seniorEnd };
   tranches.push(senior);
 
   if (i.sellerEnabled && i.sellerAmount > 0) {
     const sellerEnd = Math.min(holdMonths, i.sellerTermYears > 0 ? i.sellerTermYears * 12 : holdMonths);
-    tranches.push({ kind: 'seller', amount: i.sellerAmount, rate: i.sellerRate, amortMonths: i.sellerAmortMonths || 360, ioMonths: 0, startMonth: 1, endMonth: sellerEnd });
+    tranches.push({ kind: 'seller', amount: i.sellerAmount, rate: i.sellerRate, amortMonths: posMonths(i.sellerAmortMonths), ioMonths: 0, startMonth: 1, endMonth: sellerEnd });
   }
 
   let suppCashOutYear = 0;
   if (i.suppEnabled && i.suppAmount > 0) {
-    const startM = i.suppFundYear <= 0 ? 1 : (i.suppFundYear - 1) * 12 + 1;
-    if (i.suppFundYear > 0) suppCashOutYear = i.suppFundYear;
-    tranches.push({ kind: 'supp', amount: i.suppAmount, rate: i.suppRate, amortMonths: i.suppAmortMonths, ioMonths: 0, startMonth: startM, endMonth: holdMonths });
+    const startM = i.suppFundYear <= 0 ? 1 : (clampInt(i.suppFundYear, 1, hold) - 1) * 12 + 1;
+    if (i.suppFundYear > 0) suppCashOutYear = clampInt(i.suppFundYear, 1, hold);
+    tranches.push({ kind: 'supp', amount: i.suppAmount, rate: i.suppRate, amortMonths: posMonths(i.suppAmortMonths), ioMonths: 0, startMonth: startM, endMonth: holdMonths });
   }
 
   let refiNewLoan = 0;
   let refiPayoff = 0;
   let refiNetCashOut = 0;
   if (i.refiEnabled) {
-    const refiNOI = noiByYear[i.refiYear] ?? noiByYear[hold];
+    const refiNOI = noiByYear[refiYr] ?? noiByYear[hold];
     const refiValue = i.refiCapRate > 0 ? refiNOI / i.refiCapRate : 0;
     refiNewLoan = Math.max(0, refiValue * i.refiLtv);
     refiPayoff = tranchePayoff(senior, refiMonth - 1);
-    refiNetCashOut = Math.max(0, refiNewLoan - refiPayoff - refiNewLoan * i.refiCostPct);
-    tranches.push({ kind: 'refi', amount: refiNewLoan, rate: i.refiRate, amortMonths: i.refiAmortMonths, ioMonths: 0, startMonth: refiMonth, endMonth: holdMonths });
+    // Net can be NEGATIVE when the new loan can't cover the payoff + costs (an unfavorable refi
+    // requires bringing cash in). Don't floor it to zero — the waterfall handles a negative capital
+    // event as a call on common equity. Flooring overstated distributable cash and returns.
+    refiNetCashOut = refiNewLoan - refiPayoff - refiNewLoan * clamp01(i.refiCostPct);
+    tranches.push({ kind: 'refi', amount: refiNewLoan, rate: i.refiRate, amortMonths: posMonths(i.refiAmortMonths), ioMonths: 0, startMonth: refiMonth, endMonth: holdMonths });
   }
 
   // --- Annual debt service per lien + balances ---
@@ -409,7 +417,7 @@ export function runDetailedUW(i: DetailedUWInputs): DetailedUWResult {
     yr.cashFlow = yr.noi - yr.debtService;
     yr.dscr = yr.debtService > 0 ? yr.noi / yr.debtService : 0;
     yr.debtBalanceEnd = tranches.reduce((a, t) => a + trancheBalanceAt(t, y * 12), 0);
-    yr.financingProceeds = (suppCashOutYear === y ? i.suppAmount : 0) + (i.refiEnabled && i.refiYear === y ? refiNetCashOut : 0);
+    yr.financingProceeds = (suppCashOutYear === y ? i.suppAmount : 0) + (i.refiEnabled && refiYr === y ? refiNetCashOut : 0);
   }
 
   // --- Sources & Uses ---

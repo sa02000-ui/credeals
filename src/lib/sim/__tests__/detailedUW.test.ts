@@ -159,3 +159,20 @@ describe('debtPayoffByLien (exit payoff breakout)', () => {
     expect(r.debtPayoffByLien.some((x) => x.label === 'Supplemental')).toBe(true);
   });
 });
+
+describe('input guardrails (audit hardening)', () => {
+  it('zero/invalid amortization months cannot produce Infinity debt service', () => {
+    const r = runDetailedUW({ ...base(), amortMonths: 0 });
+    expect(Number.isFinite(r.years[0].debtService)).toBe(true);
+    expect(r.years[0].debtService).toBeGreaterThan(0);
+    expect(Number.isFinite(r.leveredIRR)).toBe(true);
+  });
+  it('out-of-range refi year does not break the schedule', () => {
+    const r = runDetailedUW({ ...base(), refiEnabled: true, refiYear: 99, refiLtv: 0.6, refiCapRate: 0.06, refiRate: 0.06, refiAmortMonths: 360, refiCostPct: 0.01 });
+    expect(Number.isFinite(r.leveredIRR)).toBe(true);
+  });
+  it('an unfavorable refi yields NEGATIVE net cash-out (cash in), not a floored zero', () => {
+    const r = runDetailedUW({ ...base(), refiEnabled: true, refiYear: 3, refiLtv: 0.1, refiCapRate: 0.09, refiRate: 0.07, refiAmortMonths: 360, refiCostPct: 0.01 });
+    expect(r.refiNetCashOut).toBeLessThan(0);
+  });
+});
