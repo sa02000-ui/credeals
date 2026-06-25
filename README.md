@@ -70,3 +70,4 @@ negotiation/closing resolvers. Run `npm test`.
 - Product spec: `docs/product/simulator-prd-mvp.md`
 - Engineering spec: `docs/engineering/simulator-technical-spec-mvp.md`
 - Content template: `docs/content/simulator-card-authoring-template.md`
+- Claude continuation prompt: `docs/handoffs/claude-continuation-prompt.md`
