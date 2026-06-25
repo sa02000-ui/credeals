@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import { useApp } from '@/lib/store';
 import { useDealLocal } from '@/lib/hooks/useDealLocal';
 import { CalibrationReview } from '@/components/CalibrationReview';
-import { computeExitOutcome, defaultDetailedInputs, drawAMCards, usd, type AMCard, type AMEffect, type AMOption, type DetailedUWInputs, type MarketDeal } from '@/lib/sim';
+import { computeExitOutcome, defaultDetailedInputs, deriveSeed, drawAMCards, seededRng, usd, type AMCard, type AMEffect, type AMOption, type DetailedUWInputs, type MarketDeal } from '@/lib/sim';
 
 /** E-AM — the quarterly Asset Management card phase (design doc Part 3). Game mode. */
 export function AMPhase({ deal }: { deal: MarketDeal }) {
@@ -85,7 +85,7 @@ function AMQuarter({ deal, am, est, dna, weakSpots, seed, applyAMEffect, advance
       <div className="space-y-3 p-3">
         {cards.length === 0 && <p className="text-sm text-slate-500">A quiet quarter — no events. Collect your distribution and move on.</p>}
         {cards.map((card) => (
-          <AMCardRunner key={card.id} card={card} resolved={resolvedThisQ.has(card.id)} dealId={deal.id} quarter={am.quarter} applyAMEffect={applyAMEffect} />
+          <AMCardRunner key={card.id} card={card} resolved={resolvedThisQ.has(card.id)} dealId={deal.id} quarter={am.quarter} runSeed={seed?.value ?? 1} applyAMEffect={applyAMEffect} />
         ))}
       </div>
 
@@ -122,11 +122,12 @@ function AMQuarter({ deal, am, est, dna, weakSpots, seed, applyAMEffect, advance
   );
 }
 
-function AMCardRunner({ card, resolved, dealId, quarter, applyAMEffect }: {
+function AMCardRunner({ card, resolved, dealId, quarter, runSeed, applyAMEffect }: {
   card: AMCard;
   resolved: boolean;
   dealId: string;
   quarter: number;
+  runSeed: number;
   applyAMEffect: ReturnType<typeof useApp>['applyAMEffect'];
 }) {
   const [result, setResult] = useState<string | null>(resolved ? '(resolved)' : null);
@@ -136,7 +137,8 @@ function AMCardRunner({ card, resolved, dealId, quarter, applyAMEffect }: {
     let text = opt.result ?? 'Done.';
     if (opt.branches && opt.branches.length) {
       const total = opt.branches.reduce((a, b) => a + b.weight, 0);
-      let r = Math.random() * total;
+      const rng = seededRng(deriveSeed(runSeed, dealId, quarter, card.id, opt.id));
+      let r = rng() * total;
       let chosen = opt.branches[0];
       for (const b of opt.branches) { r -= b.weight; if (r <= 0) { chosen = b; break; } }
       eff = { ...eff, ...chosen.effects };

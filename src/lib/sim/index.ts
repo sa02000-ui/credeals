@@ -19,3 +19,4 @@ export * from './amCards';
 export * from './dealPipeline';
 export * from './brokerCalls';
 export * from './gpTeam';
+export * from './debrief';
