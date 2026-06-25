@@ -99,7 +99,7 @@ export default function ScenarioBuilderPage() {
     setSelId(rec.id);
   }
 
-  function importBuiltins() {
+  async function importBuiltins() {
     const built = buildC2CScenarios({ market: 'balanced', difficulty: 'standard', missedPSATraps: 1 });
     const list = [...records];
     for (const s of built) {
@@ -107,8 +107,11 @@ export default function ScenarioBuilderPage() {
       list.unshift({ id: s.id, title: s.title, phase: 'c2c', severity: 50, status: 'active', entry: s.entry, steps: s.steps, notes: 'Imported from built-in C2C deck.' });
     }
     setRecords(list);
-    if (cloud) { for (const r of list) void dataClient().from('scenarios').upsert(r as never); } else persistLocal(list);
-    setMsg('Built-in C2C scenarios imported — edit away.');
+    if (!cloud) { persistLocal(list); setMsg('Built-in C2C scenarios imported — edit away.'); return; }
+    // Wait for the cloud writes and report any failures rather than claiming success blindly.
+    const results = await Promise.allSettled(list.map((r) => dataClient().from('scenarios').upsert(r as never)));
+    const failed = results.filter((x) => x.status === 'rejected' || (x.status === 'fulfilled' && (x.value as { error?: unknown } | null)?.error)).length;
+    setMsg(failed ? `Imported, but ${failed} scenario(s) failed to save — check your connection and retry.` : 'Built-in C2C scenarios imported — edit away.');
   }
 
   function exportJson() {

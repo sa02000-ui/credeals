@@ -220,6 +220,8 @@ export function LOIPanel({ deal }: { deal: MarketDeal }) {
   const [negotiating, setNegotiating] = useState(false);
   const [psaClauses, setPsaClauses] = useState<PSAClause[] | null>(null);
   const [, setPsaState] = useDealLocal<{ done: boolean; caught: string[]; missed: string[] }>('psa', deal.id, { done: false, caught: [], missed: [] });
+  // Guard against re-accepting (which would deduct earnest money again) — idempotent per deal.
+  const [loiAccepted, setLoiAccepted] = useDealLocal<boolean>('loi-accepted', deal.id, false);
   const executedLoi = filesOf(deal.id).find((x) => x.kind === 'LOI');
 
   const emdPct = f.emdAmount / Math.max(1, f.purchasePrice);
@@ -236,8 +238,14 @@ export function LOIPanel({ deal }: { deal: MarketDeal }) {
       ...(finalTerms.nonRefundableEmd ? { nonRefundTrigger: 'psa' as NonRefundTrigger } : {}),
       ...(finalTerms.titlePayer ? { titlePayer: finalTerms.titlePayer } : {}),
     });
-    applyGameOutcome({ dealId: deal.id, pursued: true, repDelta: { broker: 3 }, cashDelta: -Math.round(finalTerms.emdPct * finalTerms.price), cashLabel: `Earnest money — ${deal.name}`, event: { title: `LOI accepted: ${deal.name}`, detail: `Terms agreed at ${usd(finalTerms.price)}.`, lesson: 'LOI accepted — next the seller’s counsel sends the PSA. Read it carefully.' } });
     setNegotiating(false);
+    // Already accepted earlier? Re-open the PSA without charging earnest money / advancing time again.
+    if (loiAccepted || statusOf(deal.id) === 'c2c' || statusOf(deal.id) === 'am') {
+      setPsaClauses(buildPSA(difficulty ?? 'standard'));
+      return;
+    }
+    setLoiAccepted(true);
+    applyGameOutcome({ dealId: deal.id, pursued: true, repDelta: { broker: 3 }, cashDelta: -Math.round(finalTerms.emdPct * finalTerms.price), cashLabel: `Earnest money — ${deal.name}`, event: { title: `LOI accepted: ${deal.name}`, detail: `Terms agreed at ${usd(finalTerms.price)}.`, lesson: 'LOI accepted — next the seller’s counsel sends the PSA. Read it carefully.' } });
     advanceDays(2); // papering the accepted LOI takes a couple of days
     updateRelationship(broker.id, 'closed-clean', deal.id, `LOI accepted on ${deal.name}`);
     updateDealDNA(deal.id, { brokerPersonaId: broker.id, sellerPersonaId: seller.id, brokerRelAtLOI: game.reputation.broker });
@@ -396,9 +404,15 @@ export function LOIPanel({ deal }: { deal: MarketDeal }) {
       {mode === 'game' && (
         <div className="border-b border-slate-100 bg-violet-50/40 p-4">
           <h3 className="mb-1 text-sm font-semibold">🎭 Submit &amp; negotiate</h3>
-          <p className="mb-2 text-xs text-slate-600">Seller: <b>{seller.name}</b> — {seller.blurb} <span className="text-violet-700">💡 {seller.tells[0]}</span></p>
-          <button onClick={() => setNegotiating(true)} className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-700">Submit LOI &amp; negotiate at {usd(f.purchasePrice, { compact: true })} →</button>
-          <p className="mt-1 text-[11px] text-slate-500">Expect a few days of back-and-forth — the seller counters specific terms; hold your line or concede what costs you least. A disciplined hold can win.</p>
+          {loiAccepted ? (
+            <p className="text-sm text-emerald-700">✅ LOI accepted — earnest money is posted. Finish the PSA below to move to Contract-to-Close. (No need to re-negotiate.)</p>
+          ) : (
+            <>
+              <p className="mb-2 text-xs text-slate-600">Seller: <b>{seller.name}</b> — {seller.blurb} <span className="text-violet-700">💡 {seller.tells[0]}</span></p>
+              <button onClick={() => setNegotiating(true)} className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-700">Submit LOI &amp; negotiate at {usd(f.purchasePrice, { compact: true })} →</button>
+              <p className="mt-1 text-[11px] text-slate-500">Expect a few days of back-and-forth — the seller counters specific terms; hold your line or concede what costs you least. A disciplined hold can win.</p>
+            </>
+          )}
         </div>
       )}
 

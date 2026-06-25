@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useApp } from '@/lib/store';
 import { useDealLocal } from '@/lib/hooks/useDealLocal';
 import { CalibrationReview } from '@/components/CalibrationReview';
@@ -17,8 +17,12 @@ export function AMPhase({ deal }: { deal: MarketDeal }) {
     return { noi, annualDS };
   }, [deal]);
   const am = amStates[deal.id];
+  // Seed AM state once (in an effect, not during render).
+  useEffect(() => {
+    if (!amStates[deal.id]) initAMState(deal.id, 1 - deal.stabilizedVacancy, est.noi);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deal.id, am]);
   if (!am) {
-    initAMState(deal.id, 1 - deal.stabilizedVacancy, est.noi);
     return <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-500">Taking over the asset…</div>;
   }
 
