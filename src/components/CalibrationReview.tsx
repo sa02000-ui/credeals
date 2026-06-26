@@ -54,8 +54,10 @@ export function CalibrationReview({ deal }: { deal: MarketDeal }) {
         ddDepth: dna?.ddDepth ?? 'moderate',
         psaCatchScore: dna?.psaCatchScore ?? 0.5,
         reputation: game.reputation,
+        propertyScore: dna?.propertyScore,
+        areaScore: dna?.areaScore,
       }),
-    [out, dna?.closingScore, dna?.ddDepth, dna?.psaCatchScore, game.reputation],
+    [out, dna?.closingScore, dna?.ddDepth, dna?.psaCatchScore, dna?.propertyScore, dna?.areaScore, game.reputation],
   );
   const scoreShown = useMemo(
     () =>
@@ -68,8 +70,10 @@ export function CalibrationReview({ deal }: { deal: MarketDeal }) {
         ddDepth: dna?.ddDepth ?? 'moderate',
         psaCatchScore: dna?.psaCatchScore ?? 0.5,
         reputation: game.reputation,
+        propertyScore: dna?.propertyScore,
+        areaScore: dna?.areaScore,
       }),
-    [shown, dna?.closingScore, dna?.ddDepth, dna?.psaCatchScore, game.reputation],
+    [shown, dna?.closingScore, dna?.ddDepth, dna?.psaCatchScore, dna?.propertyScore, dna?.areaScore, game.reputation],
   );
 
   const rayLine = beat
@@ -84,7 +88,7 @@ export function CalibrationReview({ deal }: { deal: MarketDeal }) {
         <span className="text-2xl">{beat ? '🏁' : '📉'}</span>
         <div>
           <div className="text-base font-bold">Deal closed — Calibration Review</div>
-          <div className="text-xs opacity-90">{deal.name} · exited day {dna?.exitDay ?? '—'}</div>
+          <div className="text-xs opacity-90">{deal.name} · exited day {dna?.exitDay ?? '—'}{dna?.terminalOutcome ? ` · ${dna.terminalOutcome}` : ''}</div>
         </div>
         <div className="ml-auto text-right">
           <div className="text-[10px] uppercase tracking-wide opacity-80">Realized IRR</div>
@@ -136,6 +140,11 @@ export function CalibrationReview({ deal }: { deal: MarketDeal }) {
               detail={`Close ${dna?.closingScore ?? '—'}/100 · PSA catch ${Math.round((dna?.psaCatchScore ?? 0.5) * 100)}%`}
             />
           </div>
+          {(dna?.propertyScore != null || dna?.areaScore != null) && (
+            <p className="mt-1 text-[11px] text-slate-500">
+              Asset quality inputs: property {Math.round(dna?.propertyScore ?? 0)} / area {Math.round(dna?.areaScore ?? 0)}.
+            </p>
+          )}
         </div>
 
         <div>
@@ -172,6 +181,13 @@ export function CalibrationReview({ deal }: { deal: MarketDeal }) {
               <li>• Due diligence: <b>{dna.ddDepth}</b>{dna.ddDepth === 'light' ? ' — cheaper up front, but it leaves surprises for the hold.' : ' — you bought with your eyes open.'}</li>
               <li>• PSA review caught <b>{Math.round((dna.psaCatchScore ?? 0) * 100)}%</b> of the traps.</li>
               <li>• Capital raise: <b>{dna.raiseStructure}</b>. Closing quality: <b>{dna.closingScore || '—'}</b>/100.</li>
+              {dna.exitShock && (
+                <li>
+                  • Exit shock: <b>{dna.exitShock}</b>
+                  {dna.exitShockDirection ? ` (${dna.exitShockDirection})` : ''}{" "}
+                  {dna.exitShockImpactPct != null ? `· impact ${pct(dna.exitShockImpactPct)}` : ''}
+                </li>
+              )}
               {am && <li>• You made <b>{am.decisions.length}</b> asset-management decisions over <b>{am.quarter - 1}</b> quarters.</li>}
             </ul>
           </div>

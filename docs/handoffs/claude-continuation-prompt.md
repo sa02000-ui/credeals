@@ -29,6 +29,8 @@ Current simulator baseline already added:
 - Debrief module in `src/lib/sim/debrief.ts`
 - Debrief UI upgrades in `src/components/CalibrationReview.tsx`
 - Tests in `src/lib/sim/__tests__/debrief.test.ts`
+- AM_Exit terminal outcome + shock engine in `src/lib/sim/exitEngine.ts`
+- Exit-buyer persona additions in `src/lib/sim/personas.ts`
 
 Important parallel-work note:
 - Another agent may be changing distribution/waterfall model logic.
@@ -36,14 +38,21 @@ Important parallel-work note:
 - Prefer game/simulation progression, state machine, deterministic events, scoring/debrief, and content pipeline.
 
 Next implementation priorities:
-1) Add explicit phase-transition guard module for the 6-phase loop with terminal states.
-2) Ensure deterministic branching for all weighted choices in game/simulation paths.
-3) Expand scenario/content packs with template-driven structure per phase.
-4) Add replay/decision-log hooks needed for debrief timeline.
-5) Add tests:
+1) Add explicit phase-transition guard module for the 6-phase loop with terminal states (`won|pyrrhic|lost|blown-up`).
+2) Expand AM_Exit:
+   - include loan baseline in attribution,
+   - include market/weather/geopolitical shock tags,
+   - include Exit_Buyer utility model.
+3) Ensure deterministic branching for all weighted choices in game/simulation paths.
+4) Implement optional variability mode (`deterministic|stochastic`) for external-factor divergence.
+5) Expand scenario/content packs with template-driven structure per phase (denser LOI + AM decisions).
+6) Add replay/decision-log hooks needed for debrief timeline.
+7) Add tests:
    - transition validity
    - deterministic replay parity
    - branch threshold/utility sanity
+   - exit classifier and shock attribution
+   - property/area score bounds
 
 Git process per iteration:
 - Keep branch focused.
@@ -64,4 +73,4 @@ Deliverable format each iteration:
 If needed, also tell Claude:
 - keep all handoff artifacts in `/docs`
 - add/update tests whenever behavior changes
-- prefer deterministic seeded behavior over non-deterministic randomness
+- deterministic mode must remain replay-stable; stochastic mode is optional and explicitly flagged

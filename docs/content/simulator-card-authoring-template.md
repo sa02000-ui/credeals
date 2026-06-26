@@ -17,6 +17,10 @@ Use this template for any new scenario card so content remains implementable, ba
 - Context:
 - Player-facing decision prompt:
 - Teaching objective:
+- Hidden truth hooks (if any):
+  - `marketRisk`:
+  - `weatherRisk`:
+  - `geopoliticalRisk`:
 
 ## Options (2-4)
 For each option:
@@ -34,6 +38,11 @@ For each option:
   - risk impact:
 - `next_step` or weighted `branches`:
 
+For AM_Exit cards, also include:
+- `exit_buyer_profile` (if relevant):
+- `loan_context` (rate/refi pressure/debt maturity):
+- `terminal_outcome_pressure` (`won | pyrrhic | blown-up` trajectory cue):
+
 ## Weighted branch format (if uncertain outcome)
 - Branch A: weight, result, effects, next
 - Branch B: weight, result, effects, next
@@ -45,12 +54,14 @@ For each option:
 - [ ] Cost/time tradeoff is explicit.
 - [ ] At least one consequence carries into a later phase.
 - [ ] Narrative remains plausible for role and market context.
+- [ ] AM_Exit cards can be attributed to at least one shock family (market/weather/geopolitical/rates) when applicable.
 
 ## QA checks (required)
 - [ ] Valid ids and next-step references.
 - [ ] Effects are numerically bounded and realistic.
 - [ ] Works under all tagged difficulties.
 - [ ] Teaching objective is clear in debrief language.
+- [ ] If `phase = am_exit`, card is compatible with Exit_Buyer + terminal outcome system.
 
 ---
 

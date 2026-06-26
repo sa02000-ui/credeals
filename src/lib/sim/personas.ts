@@ -7,7 +7,7 @@
  * the consequence engine (later) reads traits to branch outcomes.
  */
 
-export type CounterpartyKind = 'broker' | 'lender' | 'lp' | 'seller';
+export type CounterpartyKind = 'broker' | 'lender' | 'lp' | 'seller' | 'exit-buyer';
 
 export interface Persona {
   id: string;
@@ -60,6 +60,16 @@ export const PERSONAS: Persona[] = [
     traits: { motivation: 0.4, priceFlex: 0.2, retradeRisk: 0.1 }, tells: ['Firm price', 'Hard close dates — perform or lose EMD'] },
   { id: 'seller-unrealistic', kind: 'seller', name: 'Unrealistic Seller', blurb: 'Over-priced, slow, anchored to a dream number.',
     traits: { motivation: 0.3, priceFlex: 0.3, retradeRisk: 0.4 }, tells: ['Often a dead deal', 'Patience + a low anchor, or pass'] },
+
+  // --- Exit buyers ---
+  { id: 'buyer-core-fund', kind: 'exit-buyer', name: 'Core Fund Buyer', blurb: 'Low-yield buyer seeking stable cash flow and low operational variance.',
+    traits: { priceDiscipline: 0.5, certainty: 0.9, speed: 0.5, riskTolerance: 0.25 }, tells: ['Pays up for stability', 'Penalizes unresolved operational volatility'] },
+  { id: 'buyer-value-add', kind: 'exit-buyer', name: 'Value-Add Buyer', blurb: 'Underwrites upside and may move quickly if there is meat left on the bone.',
+    traits: { priceDiscipline: 0.75, certainty: 0.65, speed: 0.75, riskTolerance: 0.7 }, tells: ['Will absorb some mess if basis is right', 'Negotiates hard on capex and deferred risks'] },
+  { id: 'buyer-1031', kind: 'exit-buyer', name: '1031 Exchange Buyer', blurb: 'Deadline-driven buyer; values certainty and speed over perfection.',
+    traits: { priceDiscipline: 0.4, certainty: 0.95, speed: 0.95, riskTolerance: 0.45 }, tells: ['Can move fast under exchange pressure', 'Execution certainty can beat pure price'] },
+  { id: 'buyer-distressed', kind: 'exit-buyer', name: 'Distressed Opportunistic Buyer', blurb: 'Looks for broken stories and demands deep discounts.',
+    traits: { priceDiscipline: 0.95, certainty: 0.55, speed: 0.65, riskTolerance: 0.9 }, tells: ['Shows up when markets freeze', 'Prices macro and operational pain aggressively'] },
 ];
 
 export function personasByKind(kind: CounterpartyKind): Persona[] {
@@ -89,4 +99,9 @@ export function pickPersona(kind: CounterpartyKind, seedKey: string, salt = 0): 
 /** Broker + seller for a deal (the two counterparties active at sourcing/napkin). */
 export function dealCounterparties(seedKey: string, salt = 0): { broker: Persona; seller: Persona } {
   return { broker: pickPersona('broker', seedKey, salt), seller: pickPersona('seller', seedKey, salt) };
+}
+
+/** Exit-stage buyer profile (who is on the other side of your sale). */
+export function dealExitBuyer(seedKey: string, salt = 0): Persona {
+  return pickPersona('exit-buyer', seedKey, salt);
 }

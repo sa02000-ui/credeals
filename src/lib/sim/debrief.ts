@@ -13,6 +13,8 @@ export interface DualScoreInput {
   ddDepth: 'full' | 'moderate' | 'light';
   psaCatchScore: number;
   reputation: Reputation & { seller?: number };
+  propertyScore?: number; // 0..100
+  areaScore?: number; // 0..100
 }
 
 export interface DualScoreResult {
@@ -23,6 +25,7 @@ export interface DualScoreResult {
     downsideProtection: number;
     covenantHeadroom: number;
     capitalEfficiency: number;
+    assetQuality: number;
   };
   executionComponents: {
     processDiscipline: number;
@@ -49,12 +52,16 @@ export function computeDualScore(i: DualScoreInput): DualScoreResult {
   );
   const covenantHeadroom = clamp(i.closeScore);
   const capitalEfficiency = clamp(clamp01(i.actualEM / 2.0) * 100);
+  const propertyScore = clamp(i.propertyScore ?? 55);
+  const areaScore = clamp(i.areaScore ?? 55);
+  const assetQuality = Math.round(propertyScore * 0.5 + areaScore * 0.5);
 
   const investment = Math.round(
-    riskAdjustedReturn * 0.4 +
-      downsideProtection * 0.25 +
-      covenantHeadroom * 0.2 +
-      capitalEfficiency * 0.15,
+    riskAdjustedReturn * 0.35 +
+      downsideProtection * 0.2 +
+      covenantHeadroom * 0.15 +
+      capitalEfficiency * 0.15 +
+      assetQuality * 0.15,
   );
 
   const ddAdj = i.ddDepth === 'full' ? 8 : i.ddDepth === 'moderate' ? 2 : -10;
@@ -78,7 +85,7 @@ export function computeDualScore(i: DualScoreInput): DualScoreResult {
   return {
     investment,
     execution,
-    investmentComponents: { riskAdjustedReturn, downsideProtection, covenantHeadroom, capitalEfficiency },
+    investmentComponents: { riskAdjustedReturn, downsideProtection, covenantHeadroom, capitalEfficiency, assetQuality },
     executionComponents: { processDiscipline, relationshipCapital, ethics, timeDiscipline },
   };
 }

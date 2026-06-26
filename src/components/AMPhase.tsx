@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import { useApp } from '@/lib/store';
 import { useDealLocal } from '@/lib/hooks/useDealLocal';
 import { CalibrationReview } from '@/components/CalibrationReview';
-import { computeExitOutcome, defaultDetailedInputs, deriveSeed, drawAMCards, seededRng, usd, type AMCard, type AMEffect, type AMOption, type DetailedUWInputs, type MarketDeal } from '@/lib/sim';
+import { computeExitOutcome, dealExitBuyer, defaultDetailedInputs, deriveSeed, drawAMCards, evaluateExitOutcome, seededRng, usd, type AMCard, type AMEffect, type AMOption, type DetailedUWInputs, type MarketDeal, type VariabilityMode } from '@/lib/sim';
 
 /** E-AM — the quarterly Asset Management card phase (design doc Part 3). Game mode. */
 export function AMPhase({ deal }: { deal: MarketDeal }) {
@@ -41,12 +41,38 @@ function AMQuarter({ deal, am, est, dna, weakSpots, seed, applyAMEffect, advance
 }) {
   const { game, finalizeExit } = useApp();
   const [scenarios] = useDealLocal<{ inputs: DetailedUWInputs }[]>('uw-scenarios-v2', deal.id, [{ inputs: defaultDetailedInputs(deal) }]);
+  const [variabilityMode] = useDealLocal<VariabilityMode>('exit-variability-mode', deal.id, 'deterministic');
+  const exitBuyer = useMemo(
+    () => dealExitBuyer(deal.id, seed?.value ?? 0),
+    [deal.id, seed?.value],
+  );
 
   function doExit() {
-    if (!confirm('Exit (sell) this asset now? This ends the hold and scores the deal.')) return;
+    if (
+      !confirm(
+        `Exit (sell) this asset now? Buyer: ${exitBuyer.name}. This ends the hold and scores the deal.`,
+      )
+    )
+      return;
     const inputs = scenarios[0]?.inputs ?? defaultDetailedInputs(deal);
     const outcome = computeExitOutcome(inputs, am.noiCurrent, game.market);
-    finalizeExit(deal.id, outcome.projectedIRR, outcome.actualIRR);
+    const evaluated = evaluateExitOutcome({
+      deal,
+      market: game.market,
+      projectedIRR: outcome.projectedIRR,
+      actualIRR: outcome.actualIRR,
+      seed: seed?.value ?? 1,
+      holdQuarter: am.quarter,
+      variabilityMode,
+    });
+    finalizeExit(deal.id, evaluated.projectedIRR, evaluated.adjustedActualIRR, {
+      terminalOutcome: evaluated.terminal,
+      exitShock: evaluated.shock?.type,
+      exitShockDirection: evaluated.shock?.direction,
+      exitShockImpactPct: evaluated.shock?.impactPct,
+      propertyScore: evaluated.risk.propertyScore,
+      areaScore: evaluated.risk.areaScore,
+    });
     setStatus(deal.id, 'archived');
   }
 
@@ -110,7 +136,11 @@ function AMQuarter({ deal, am, est, dna, weakSpots, seed, applyAMEffect, advance
 
       {/* exit */}
       <div className={`flex items-center justify-between gap-2 border-t border-teal-200 px-3 py-2 ${exitFlag ? 'bg-amber-50' : ''}`}>
-        <span className="text-xs text-slate-600">{exitFlag ? '📨 You have an offer on the table — sell now?' : `Hold and operate, or exit when the numbers are right (Q${am.quarter}, NOI ${usd(am.noiCurrent, { compact: true })}).`}</span>
+        <span className="text-xs text-slate-600">
+          {exitFlag
+            ? `📨 ${exitBuyer.name} has an offer on the table — sell now?`
+            : `Hold and operate, or exit when the numbers are right (Q${am.quarter}, NOI ${usd(am.noiCurrent, { compact: true })}). Exit buyer profile: ${exitBuyer.name}.`}
+        </span>
         <button
           onClick={doExit}
           className={`rounded-lg px-4 py-1.5 text-sm font-semibold ${exitFlag ? 'bg-amber-500 text-white hover:bg-amber-600' : 'border border-slate-300 text-slate-700 hover:bg-slate-100'}`}
