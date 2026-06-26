@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { runDetailedUW, defaultDetailedInputs, computeExitOutcome, irr, lineAmount, type DetailedUWInputs } from '../detailedUW';
+import { runDetailedUW, defaultDetailedInputs, computeExitOutcome, irr, lineAmount, NO_HURDLE, type DetailedUWInputs } from '../detailedUW';
 
 const DEAL = {
   askPrice: 10_000_000,
@@ -176,3 +176,28 @@ describe('input guardrails (audit hardening)', () => {
     expect(r.refiNetCashOut).toBeLessThan(0);
   });
 });
+
+describe('waterfall: GP co-invest pari passu + tiered promote (owner spec)', () => {
+  it('GP co-invest earns the SAME multiple as the LP (pari passu); promote is separate carry', () => {
+    const r = runDetailedUW(base());
+    expect(r.gpMultiple).toBeCloseTo(r.lpEquityMultiple, 4); // co-invest multiple == LP multiple
+    expect(r.gpPromoteTotal).toBeGreaterThan(0);
+    // total GP profit includes the promote on top of the co-invest profit
+    expect(r.gpProfit).toBeGreaterThan(r.gpCoinvestReturn - r.gpEquity);
+  });
+  it('a higher promote band gives the GP more carry once the hurdle clears', () => {
+    const single = runDetailedUW({ ...base(), promoteTiers: [{ splitToGp: 0.2, hurdle: NO_HURDLE, hurdleType: 'irr' }] });
+    const tiered = runDetailedUW({ ...base(), promoteTiers: [
+      { splitToGp: 0.2, hurdle: 0.05, hurdleType: 'irr' },
+      { splitToGp: 0.5, hurdle: NO_HURDLE, hurdleType: 'irr' },
+    ] });
+    expect(tiered.gpPromoteTotal).toBeGreaterThan(single.gpPromoteTotal);
+  });
+  it('exposes carried-forward accrual balances + the active promote tier per year', () => {
+    const r = runDetailedUW(base());
+    expect(r.waterfall[0].commonPrefAccruedEnd).toBeGreaterThanOrEqual(0);
+    expect(r.waterfall[0].prefAccruedEnd).toBeGreaterThanOrEqual(0);
+    expect(typeof r.waterfall[r.hold - 1].promoteTier).toBe('number');
+    expect(r.commonPrefAccruedUnpaid).toBeGreaterThanOrEqual(0);
+  });
+})

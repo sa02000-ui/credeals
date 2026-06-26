@@ -69,6 +69,17 @@ export const BASIS_LABEL: Record<LineBasis, string> = {
   millage: 'millage × price',
 };
 
+/** One band of the common-equity promote. `splitToGp` is the GP's carry at this band (e.g. 0.30 for
+ *  70/30). The band applies until the common investors clear `hurdle` (an IRR or CoC, decimal); the
+ *  final/top band uses a sentinel hurdle (>= NO_HURDLE) meaning "no further escalation". */
+export interface PromoteTier {
+  splitToGp: number;
+  hurdle: number;
+  hurdleType: 'irr' | 'coc';
+}
+/** Sentinel for "top tier, never escalates further" (Infinity isn't JSON-safe for localStorage). */
+export const NO_HURDLE = 999;
+
 export interface DetailedUWInputs {
   purchasePrice: number;
   units: number;
@@ -130,6 +141,10 @@ export interface DetailedUWInputs {
   gpCoinvestPct: number;
   lpPrefReturn: number;
   promoteToGp: number;
+  /** Tiered promote: after the LP preferred return, residual profit splits per tier; each tier's
+   *  split applies until the common investors clear that tier's hurdle (IRR or CoC), then the next
+   *  tier applies. When absent/empty the model falls back to a single tier at promoteToGp. */
+  promoteTiers?: PromoteTier[];
 
   // --- Exit ---
   holdYears: number;
@@ -175,6 +190,14 @@ export interface WaterfallYear {
   pref: number;
   lp: number;
   gp: number;
+  /** of `gp` this year, how much is promote (carry) vs. return on GP co-invest */
+  gpPromote?: number;
+  /** preferred-equity accrued-but-unpaid balance at end of year (carried forward) */
+  prefAccruedEnd?: number;
+  /** common-equity LP preferred-return accrued-but-unpaid at end of year (carried forward) */
+  commonPrefAccruedEnd?: number;
+  /** which promote band was active this year (1-based) */
+  promoteTier?: number;
 }
 
 export interface SampleReturn {
@@ -223,6 +246,14 @@ export interface DetailedUWResult {
   gpProfit: number;
   gpMultiple: number;
   prefIRR: number;
+  /** total promote (carried interest) to the GP over the hold — separate from its co-invest return */
+  gpPromoteTotal: number;
+  /** the GP's return on its co-invested (LP-side, pari-passu) capital, over the hold */
+  gpCoinvestReturn: number;
+  /** preferred-equity accrued return still unpaid at exit (ideally 0) */
+  prefAccruedUnpaid: number;
+  /** common-equity LP preferred return still unpaid at exit (ideally 0) */
+  commonPrefAccruedUnpaid: number;
 
   waterfall: WaterfallYear[];
   sampleReturn: SampleReturn;
@@ -455,95 +486,106 @@ export function runDetailedUW(i: DetailedUWInputs): DetailedUWResult {
     distributable[y] = yr.cashFlow + yr.financingProceeds + (y === hold ? netSaleProceeds : 0);
   }
 
-  // --- Waterfall with carried (accrued) preferred ---
+  // --- Waterfall: preferred equity → common equity (LP preferred return, return of capital, tiered
+  //     promote). GP co-invest is LP-side capital paid pari passu; the promote is separate carry.
+  //     Unpaid preferred (both the pref-equity accrual and the common LP preferred return) accrues
+  //     and carries forward until cash is available. Promote tiers escalate once the common investors
+  //     clear each hurdle (IRR or CoC), evaluated on a lookback basis. ---
+  const tiers: PromoteTier[] =
+    i.promoteTiers && i.promoteTiers.length > 0 ? i.promoteTiers : [{ splitToGp: clamp01(i.promoteToGp), hurdle: NO_HURDLE, hurdleType: 'irr' }];
+
   const waterfall: WaterfallYear[] = [];
   const prefCash: number[] = [];
   const lpCash: number[] = [];
-  const gpCash: number[] = [];
+  const gpCash: number[] = []; // total to GP (co-invest return + promote)
+  const gpCoinvestCash: number[] = []; // GP's pari-passu return on co-invest
+  const gpPromoteCash: number[] = []; // GP promote (carry)
 
   let prefCapital = prefEquity;
   let prefAccrued = 0;
-  let lpCapital = lpEquity;
-  let gpCapital = gpEquity;
-  let lpAccrued = 0;
-  let gpAccrued = 0;
+  let commonCapital = commonEquity; // LP + GP co-invest, returned pari passu
+  let commonPrefAccrued = 0;
+  const lpFrac = commonEquity > 0 ? lpEquity / commonEquity : 1;
+  const invFlows: number[] = [-commonEquity]; // common-investor cash flows, for the hurdle lookback
+  let cumInvestorDist = 0;
 
   for (let y = 1; y <= hold; y++) {
     let cash = distributable[y];
     let prefPaid = 0;
-    const isEvent = (pnl[y - 1].financingProceeds > 0) || y === hold;
+    const isEvent = pnl[y - 1].financingProceeds > 0 || y === hold;
 
     if (cash < 0) {
-      const denom = commonEquity > 0 ? commonEquity : 1;
-      lpCash[y] = cash * (lpEquity / denom);
-      gpCash[y] = cash * (gpEquity / denom);
+      // capital call: split pro-rata across the common investors; preferred keeps accruing
+      const lpC = cash * lpFrac;
+      lpCash[y] = lpC;
+      gpCoinvestCash[y] = cash - lpC;
+      gpPromoteCash[y] = 0;
+      gpCash[y] = cash - lpC;
       prefCash[y] = 0;
-      // still accrue pref while underwater
       if (prefCapital > 0) prefAccrued += (prefCapital + prefAccrued) * i.prefAccrueRate;
-      waterfall.push({ year: y, distributable: cash, pref: 0, lp: lpCash[y], gp: gpCash[y] });
+      if (commonCapital > 0) commonPrefAccrued += (commonCapital + commonPrefAccrued) * i.lpPrefReturn;
+      invFlows.push(cash);
+      cumInvestorDist += cash;
+      waterfall.push({ year: y, distributable: cash, pref: 0, lp: lpC, gp: cash - lpC, gpPromote: 0, prefAccruedEnd: prefAccrued, commonPrefAccruedEnd: commonPrefAccrued, promoteTier: 0 });
       continue;
     }
 
-    // 1) preferred — current pay, then accrue, then capital-event payoff
+    // 1) Preferred equity — current pay, accrue (compounding), capital-event payoff of accrued + capital
     if (prefCapital > 0 || prefAccrued > 0) {
       const wantCurrent = prefCapital * i.prefCurrentRate;
       const payCurrent = Math.min(cash, wantCurrent);
       cash -= payCurrent;
       prefPaid += payCurrent;
       if (wantCurrent - payCurrent > 0) prefAccrued += wantCurrent - payCurrent; // unpaid current rolls to accrued
-      prefAccrued += (prefCapital + prefAccrued) * i.prefAccrueRate; // compound the carry
+      prefAccrued += (prefCapital + prefAccrued) * i.prefAccrueRate;
       if (isEvent) {
         const payAccrued = Math.min(cash, prefAccrued);
-        prefAccrued -= payAccrued;
-        cash -= payAccrued;
-        prefPaid += payAccrued;
+        prefAccrued -= payAccrued; cash -= payAccrued; prefPaid += payAccrued;
         const payCapital = Math.min(cash, prefCapital);
-        prefCapital -= payCapital;
-        cash -= payCapital;
-        prefPaid += payCapital;
+        prefCapital -= payCapital; cash -= payCapital; prefPaid += payCapital;
       }
     }
 
-    // 2) common pref return (hurdle), accruing
-    lpAccrued += lpCapital * i.lpPrefReturn;
-    gpAccrued += gpCapital * i.lpPrefReturn;
-    let lpPaid = 0;
-    let gpPaid = 0;
-    const accrTot = lpAccrued + gpAccrued;
-    if (accrTot > 0 && cash > 0) {
-      const payAccr = Math.min(cash, accrTot);
-      const lpA = payAccr * (lpAccrued / accrTot);
-      const gpA = payAccr - lpA;
-      lpAccrued -= lpA;
-      gpAccrued -= gpA;
-      lpPaid += lpA;
-      gpPaid += gpA;
-      cash -= payAccr;
+    // 2) Common-equity LP preferred return — accrues on unreturned capital, compounds, carries forward
+    commonPrefAccrued += (commonCapital + commonPrefAccrued) * i.lpPrefReturn;
+    let investorPaid = 0;
+    if (commonPrefAccrued > 0 && cash > 0) {
+      const pay = Math.min(cash, commonPrefAccrued);
+      commonPrefAccrued -= pay; cash -= pay; investorPaid += pay;
     }
-    // 3) return of capital
-    const capTot = lpCapital + gpCapital;
-    if (capTot > 0 && cash > 0) {
-      const payCap = Math.min(cash, capTot);
-      const lpC = payCap * (lpCapital / capTot);
-      const gpC = payCap - lpC;
-      lpCapital -= lpC;
-      gpCapital -= gpC;
-      lpPaid += lpC;
-      gpPaid += gpC;
-      cash -= payCap;
+    // 3) Return of common capital (LP + GP co-invest, pari passu)
+    if (commonCapital > 0 && cash > 0) {
+      const pay = Math.min(cash, commonCapital);
+      commonCapital -= pay; cash -= pay; investorPaid += pay;
     }
-    // 4) promote split
+    // 4) Residual profit splits per promote tier (hurdle on common-investor returns to date)
+    let gpPromote = 0;
+    let activeTier = 0;
     if (cash > 0) {
-      const gpPromote = cash * clamp01(i.promoteToGp);
-      lpPaid += cash - gpPromote;
-      gpPaid += gpPromote;
+      const achievedIrr = irr([...invFlows, investorPaid]);
+      const achievedCoc = commonEquity > 0 ? (cumInvestorDist + investorPaid) / commonEquity / y : 0;
+      let idx = 0;
+      while (idx < tiers.length - 1) {
+        const metric = tiers[idx].hurdleType === 'coc' ? achievedCoc : achievedIrr;
+        if (metric >= tiers[idx].hurdle) idx++; else break;
+      }
+      activeTier = idx + 1;
+      gpPromote = cash * clamp01(tiers[idx].splitToGp);
+      investorPaid += cash - gpPromote;
       cash = 0;
     }
 
+    // Split the common-investor cash between LP and GP co-invest pro-rata
+    const lpPaid = investorPaid * lpFrac;
+    const gpCoinvestPaid = investorPaid - lpPaid;
     prefCash[y] = prefPaid;
     lpCash[y] = lpPaid;
-    gpCash[y] = gpPaid;
-    waterfall.push({ year: y, distributable: distributable[y], pref: prefPaid, lp: lpPaid, gp: gpPaid });
+    gpCoinvestCash[y] = gpCoinvestPaid;
+    gpPromoteCash[y] = gpPromote;
+    gpCash[y] = gpCoinvestPaid + gpPromote;
+    invFlows.push(investorPaid);
+    cumInvestorDist += investorPaid;
+    waterfall.push({ year: y, distributable: distributable[y], pref: prefPaid, lp: lpPaid, gp: gpCash[y], gpPromote, prefAccruedEnd: prefAccrued, commonPrefAccruedEnd: commonPrefAccrued, promoteTier: activeTier });
   }
 
   // --- Returns ---
@@ -566,9 +608,12 @@ export function runDetailedUW(i: DetailedUWInputs): DetailedUWResult {
   const prefFlows = [-prefEquity, ...prefCash.slice(1)];
   const prefIRR = prefEquity > 0 ? irr(prefFlows) : 0;
 
-  const gpDistribs = gpCash.slice(1).reduce((a, b) => a + b, 0);
+  const gpCoinvestReturn = gpCoinvestCash.slice(1).reduce((a, b) => a + b, 0);
+  const gpPromoteTotal = gpPromoteCash.slice(1).reduce((a, b) => a + b, 0);
+  const gpDistribs = gpCoinvestReturn + gpPromoteTotal;
   const gpProfit = gpDistribs - gpEquity + acqFee;
-  const gpMultiple = gpEquity > 0 ? gpDistribs / gpEquity : 0;
+  // Multiple is on CO-INVESTED capital only — the promote is carry, not a return on capital.
+  const gpMultiple = gpEquity > 0 ? gpCoinvestReturn / gpEquity : 0;
 
   // --- Sample LP return on a user check size (rides the LP class pro-rata) ---
   const share = lpEquity > 0 ? i.sampleInvestment / lpEquity : 0;
@@ -612,6 +657,10 @@ export function runDetailedUW(i: DetailedUWInputs): DetailedUWResult {
     gpProfit,
     gpMultiple,
     prefIRR,
+    gpPromoteTotal,
+    gpCoinvestReturn,
+    prefAccruedUnpaid: prefAccrued,
+    commonPrefAccruedUnpaid: commonPrefAccrued,
     waterfall,
     sampleReturn,
     incomeDetail,
@@ -729,6 +778,8 @@ export function defaultDetailedInputs(d: {
     gpCoinvestPct: 0.1,
     lpPrefReturn: 0.08,
     promoteToGp: 0.3,
+    // Default: a single promote band (no hurdle escalation). Add bands in the UI for tiered promote.
+    promoteTiers: [{ splitToGp: 0.3, hurdle: NO_HURDLE, hurdleType: 'irr' }],
     holdYears: 5,
     exitCapRate: +(d.stabilizedCapRate + 0.005).toFixed(4),
     saleCostPct: 0.02,
