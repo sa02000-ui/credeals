@@ -168,7 +168,7 @@ export function CalibrationReview({ deal }: { deal: MarketDeal }) {
             ))}
           </div>
           <p className="mt-1 text-[11px] text-slate-500">
-            These are rapid deterministic probes for "what changed outcome" learning — not a full model rebuild.
+            These are rapid deterministic probes for &lsquo;what changed outcome&rsquo; learning — not a full model rebuild.
           </p>
         </div>
 

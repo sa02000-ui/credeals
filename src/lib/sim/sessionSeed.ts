@@ -56,6 +56,7 @@ export const CURVEBALL_IDS = [
   'corporate-tenant-opportunity', 'contractor-dispute', 'key-tenant-departure',
   'flood-event', 'favorable-comp-lease', 'lender-covenant-breach',
   'seller-network-referral', 'broker-repair-mission', 'lp-cold-feet',
+  'weather-event-response', 'geopolitical-oil-shock', 'market-move-whipsaw',
   'unsolicited-buyer-offer', 'capital-call-trigger',
 ];
 

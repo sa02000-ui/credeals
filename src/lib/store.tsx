@@ -13,6 +13,7 @@ import {
   arrivalNote,
   applyRep,
   treasuryBalance,
+  guardDealTransition,
   DIFFICULTY_INFO,
   PROFILE_CONFIGS,
   INITIAL_PLAYER_MODEL,
@@ -492,6 +493,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     function setStatus(dealId: string, status: DealStatus) {
       const prev = statusOf(dealId);
       if (prev === status) return;
+      const transition = guardDealTransition(prev, status);
+      if (!transition.ok) {
+        setSyncError(transition.reason ?? `Invalid stage transition: ${prev} -> ${status}`);
+        return;
+      }
       // 'lost' is tracked client-side (it isn't in the deal_stage DB enum) — mark it, count it, and
       // after a few losses have Ray offer concrete guidance. No DB write (statusOf overrides display).
       if (status === 'lost') {
