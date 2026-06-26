@@ -10,6 +10,7 @@ import {
   defaultDetailedInputs,
   lineAmount,
   newLineId,
+  NO_HURDLE,
   pct,
   runDetailedUW,
   usd,
@@ -18,6 +19,7 @@ import {
   type LineCtx,
   type LineItem,
   type MarketDeal,
+  type PromoteTier,
 } from '@/lib/sim';
 
 interface Scenario { id: string; name: string; inputs: DetailedUWInputs }
@@ -204,7 +206,8 @@ export function DetailedUWPanel({ deal }: { deal: MarketDeal }) {
           </KpiGroup>
           <KpiGroup label="GP (sponsor)" color="violet">
             <Kpi label="GP total profit" info="r.promote" value={usd(r.gpProfit, { compact: true })} big />
-            <Kpi label="GP equity multiple" value={`${r.gpMultiple.toFixed(2)}x`} />
+            <Kpi label="GP promote (carry)" value={usd(r.gpPromoteTotal, { compact: true })} />
+            <Kpi label="GP co-invest multiple" value={`${r.gpMultiple.toFixed(2)}x`} />
             {inp.prefEquityEnabled && <Kpi label="Pref IRR" info="f.prefEquity" value={pct(r.prefIRR)} />}
             <Kpi label="Going-in cap" info="m.walkInCap" value={pct(r.goingInCap)} />
           </KpiGroup>
@@ -349,16 +352,20 @@ export function DetailedUWPanel({ deal }: { deal: MarketDeal }) {
         <div className="mt-3 rounded-lg border-2 border-violet-200 bg-violet-50/30 p-3">
           <div className="mb-2 text-xs font-bold uppercase tracking-wide text-violet-700">Common equity & promote</div>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            <Pct label="GP co-invest" v={inp.gpCoinvestPct} onChange={(v) => set({ gpCoinvestPct: v })} />
-            <Pct label="LP pref return (hurdle)" info="r.prefReturn" v={inp.lpPrefReturn} onChange={(v) => set({ lpPrefReturn: v })} />
-            <Pct label="Promote to GP" info="r.promote" v={inp.promoteToGp} onChange={(v) => set({ promoteToGp: v })} />
+            <Pct label="GP co-invest" info="r.promote" v={inp.gpCoinvestPct} onChange={(v) => set({ gpCoinvestPct: v })} />
+            <Pct label="LP preferred return" info="r.prefReturn" v={inp.lpPrefReturn} onChange={(v) => set({ lpPrefReturn: v })} />
           </div>
+          <p className="mt-1 text-[11px] text-slate-500">GP co-invest earns the LP return (pari passu) — it is <b>not</b> the promote. The promote below is carried interest, not tied to capital.</p>
+          <PromoteTiersEditor inp={inp} set={set} />
         </div>
         <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
           <Stat label="Pref equity" value={usd(r.prefEquity, { compact: true })} />
           <Stat label="LP equity" value={usd(r.lpEquity, { compact: true })} />
-          <Stat label="GP equity" value={usd(r.gpEquity, { compact: true })} />
-          <Stat label="GP multiple" value={`${r.gpMultiple.toFixed(2)}x`} />
+          <Stat label="GP co-invest" value={usd(r.gpEquity, { compact: true })} />
+          <Stat label="GP co-invest multiple" value={`${r.gpMultiple.toFixed(2)}x`} />
+          <Stat label="GP promote (carry)" value={usd(r.gpPromoteTotal, { compact: true })} />
+          <Stat label="Pref accrued unpaid (exit)" value={usd(r.prefAccruedUnpaid, { compact: true })} />
+          <Stat label="LP pref accrued unpaid (exit)" value={usd(r.commonPrefAccruedUnpaid, { compact: true })} />
         </div>
       </Section>
 
@@ -439,9 +446,12 @@ export function DetailedUWPanel({ deal }: { deal: MarketDeal }) {
                 <StmtRow label="Net sale proceeds (exit)" muted cells={r.years.map((y) => (y.year === r.hold ? usd(r.netSaleProceeds, { compact: true }) : '—'))} />
 
                 <BandRow label="Distributions" color="bg-violet-50 text-violet-700" cols={r.hold + 2} />
-                {inp.prefEquityEnabled && <StmtRow label="Preferred (current + carry)" cells={r.waterfall.map((w) => usd(w.pref, { compact: true }))} />}
+                {inp.prefEquityEnabled && <StmtRow label="Preferred equity (current + accrued payoff)" cells={r.waterfall.map((w) => usd(w.pref, { compact: true }))} />}
                 <StmtRow label="LP distributions" bold cells={r.waterfall.map((w) => usd(w.lp, { compact: true }))} />
-                <StmtRow label="GP distributions" cells={r.waterfall.map((w) => usd(w.gp, { compact: true }))} />
+                <StmtRow label="GP distributions (co-invest + promote)" cells={r.waterfall.map((w) => usd(w.gp, { compact: true }))} />
+                <StmtRow label="…of which GP promote (carry)" muted cells={r.waterfall.map((w) => usd(w.gpPromote ?? 0, { compact: true }))} />
+                {inp.prefEquityEnabled && <StmtRow label="Pref-equity accrued, carried fwd" muted cells={r.waterfall.map((w) => usd(w.prefAccruedEnd ?? 0, { compact: true }))} />}
+                <StmtRow label="LP pref accrued, carried fwd" muted cells={r.waterfall.map((w) => usd(w.commonPrefAccruedEnd ?? 0, { compact: true }))} />
               </tbody>
             </table>
           </div>
@@ -756,6 +766,44 @@ function Pct({ label, v, onChange, info }: { label: string; v: number; onChange:
         <span className="pointer-events-none absolute right-2 top-1.5 text-xs text-slate-400">%</span>
       </div>
     </label>
+  );
+}
+
+function PromoteTiersEditor({ inp, set }: { inp: DetailedUWInputs; set: (patch: Partial<DetailedUWInputs>) => void }) {
+  const tiers: PromoteTier[] =
+    inp.promoteTiers && inp.promoteTiers.length > 0 ? inp.promoteTiers : [{ splitToGp: inp.promoteToGp, hurdle: NO_HURDLE, hurdleType: 'irr' }];
+  const update = (next: PromoteTier[]) => set({ promoteTiers: next, promoteToGp: next[0]?.splitToGp ?? inp.promoteToGp });
+  const setTier = (idx: number, patch: Partial<PromoteTier>) => update(tiers.map((t, i) => (i === idx ? { ...t, ...patch } : t)));
+  const addTier = () => update([...tiers.slice(0, -1), { splitToGp: tiers[tiers.length - 1].splitToGp, hurdle: 0.15, hurdleType: 'irr' }, tiers[tiers.length - 1]]);
+  const removeTier = (idx: number) => { if (tiers.length > 1) update(tiers.filter((_, i) => i !== idx)); };
+  const isTop = (idx: number) => idx === tiers.length - 1;
+  return (
+    <div className="mt-3">
+      <div className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold text-slate-600">Promote tiers <InfoTip k="r.promote" /></div>
+      <div className="space-y-1.5">
+        {tiers.map((t, idx) => (
+          <div key={idx} className="flex flex-wrap items-center gap-2 rounded-md border border-violet-100 bg-white px-2 py-1.5 text-xs">
+            <span className="font-semibold text-violet-700">Tier {idx + 1}</span>
+            <label className="flex items-center gap-1">GP <input type="number" value={+(t.splitToGp * 100).toFixed(1)} step={5} onChange={(e) => setTier(idx, { splitToGp: Number(e.target.value) / 100 })} className="w-14 rounded border border-slate-200 px-1 py-0.5 text-right tabular-nums focus:outline-none" />%</label>
+            {isTop(idx) ? (
+              <span className="text-slate-400">top tier (no further hurdle)</span>
+            ) : (
+              <>
+                <span className="text-slate-400">up to</span>
+                <input type="number" value={+(t.hurdle * 100).toFixed(1)} step={1} onChange={(e) => setTier(idx, { hurdle: Number(e.target.value) / 100 })} className="w-16 rounded border border-slate-200 px-1 py-0.5 text-right tabular-nums focus:outline-none" />
+                <select value={t.hurdleType} onChange={(e) => setTier(idx, { hurdleType: e.target.value as PromoteTier['hurdleType'] })} className="rounded border border-slate-200 px-1 py-0.5 focus:outline-none">
+                  <option value="irr">% IRR</option>
+                  <option value="coc">% CoC</option>
+                </select>
+              </>
+            )}
+            {tiers.length > 1 && <button onClick={() => removeTier(idx)} className="ml-auto text-slate-300 hover:text-red-500" title="Remove tier">✕</button>}
+          </div>
+        ))}
+      </div>
+      <button onClick={addTier} className="mt-1.5 rounded-md border border-dashed border-violet-300 px-2 py-0.5 text-[11px] text-violet-700 hover:bg-violet-50">+ Add tier</button>
+      <p className="mt-1 text-[10px] text-slate-400">e.g. GP 30% up to 12% IRR → 40% up to 15% IRR → 50% above. The split escalates once the common investors clear each hurdle. Keep hurdles ascending.</p>
+    </div>
   );
 }
 
