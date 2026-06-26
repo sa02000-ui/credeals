@@ -64,3 +64,10 @@ npm run test:watch   # vitest watch mode
 The financial and game engines are covered by `src/lib/sim/__tests__/` — the proforma identities
 (NOI, equity, waterfall reconciliation), per-cell overrides, input clamping, IRR/PMT math, and the
 negotiation/closing resolvers. Run `npm test`.
+
+## Simulator design docs (in-repo handoff)
+
+- Product spec: `docs/product/simulator-prd-mvp.md`
+- Engineering spec: `docs/engineering/simulator-technical-spec-mvp.md`
+- Content template: `docs/content/simulator-card-authoring-template.md`
+- Claude continuation prompt: `docs/handoffs/claude-continuation-prompt.md`

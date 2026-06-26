@@ -13,6 +13,7 @@ import {
   arrivalNote,
   applyRep,
   treasuryBalance,
+  guardDealTransition,
   DIFFICULTY_INFO,
   PROFILE_CONFIGS,
   INITIAL_PLAYER_MODEL,
@@ -28,6 +29,8 @@ import {
   type DealDNA,
   type AMRunState,
   type AMEffect,
+  type ExitOutcomeClass,
+  type ExitShockType,
   type CoachMessage,
   type GameNotification,
   type CounterpartyRelationship,
@@ -198,7 +201,19 @@ interface AppContextValue extends AppState {
   applyAMEffect: (dealId: string, effect: AMEffect, quarter: number, cardId: string, optionId: string) => void;
   advanceAMQuarter: (dealId: string, distribution: number) => void;
   /** finalize a deal at exit: record projected/actual returns + roll the result into the player model (once) */
-  finalizeExit: (dealId: string, projectedIRR: number, actualIRR: number) => void;
+  finalizeExit: (
+    dealId: string,
+    projectedIRR: number,
+    actualIRR: number,
+    meta?: {
+      terminalOutcome?: ExitOutcomeClass;
+      exitShock?: ExitShockType;
+      exitShockDirection?: 'positive' | 'negative';
+      exitShockImpactPct?: number;
+      propertyScore?: number;
+      areaScore?: number;
+    },
+  ) => void;
   setMode: (m: SimMode) => void;
   setMarket: (m: MarketCondition) => void;
   startGame: (d: Difficulty, minutesPerDay?: number) => void;
@@ -478,13 +493,43 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     function setStatus(dealId: string, status: DealStatus) {
       const prev = statusOf(dealId);
       if (prev === status) return;
+      const transition = guardDealTransition(prev, status);
+      if (!transition.ok) {
+        setSyncError(transition.reason ?? `Invalid stage transition: ${prev} -> ${status}`);
+        return;
+      }
       // 'lost' is tracked client-side (it isn't in the deal_stage DB enum) — mark it, count it, and
       // after a few losses have Ray offer concrete guidance. No DB write (statusOf overrides display).
       if (status === 'lost') {
         setState((s) => {
           if (s.lostDealIds.includes(dealId)) return s;
           const dealsLost = s.dealsLost + 1;
-          const base = { ...s, lastActionDay: s.day, idleLevel: 0, lostDealIds: [...s.lostDealIds, dealId], dealsLost };
+          const prevDna = s.dealDNA[dealId];
+          const nextDna = prevDna
+            ? { ...prevDna, terminalOutcome: 'lost' as const }
+            : {
+                dealId,
+                uwScore: 2,
+                brokerRelAtLOI: 50,
+                sellerPersonaId: '',
+                brokerPersonaId: '',
+                psaCatchScore: 0,
+                ddDepth: 'moderate' as const,
+                lenderChosen: '',
+                raiseStructure: 'solo' as const,
+                businessPlan: 'value-add' as const,
+                closingScore: 0,
+                amDecisions: [],
+                terminalOutcome: 'lost' as const,
+              };
+          const base = {
+            ...s,
+            lastActionDay: s.day,
+            idleLevel: 0,
+            lostDealIds: [...s.lostDealIds, dealId],
+            dealsLost,
+            dealDNA: { ...s.dealDNA, [dealId]: nextDna },
+          };
           if (dealsLost < 3 || s.lostHintGiven) return base;
           const ts = Date.now();
           const text = "Losing a few stings — let's fix it. Most lost deals come down to one of three things: (1) your offer was too far below the seller's floor — meet closer to their number; (2) weak terms — a higher earnest deposit, a shorter due-diligence window, and dropping the financing contingency make you the safer buyer even at a lower price; (3) thin broker rapport — the credible buyer who can actually close gets the look. Try sharpening your terms before chasing price.";
@@ -632,7 +677,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           const next: AMRunState = { ...am, quarter: am.quarter + 1, cashFlowHistory: [...am.cashFlowHistory, { quarter: am.quarter, amount: distribution }] };
           return { ...s, day: s.day + 90, amStates: { ...s.amStates, [dealId]: next } };
         }),
-      finalizeExit: (dealId, projectedIRR, actualIRR) =>
+      finalizeExit: (dealId, projectedIRR, actualIRR, meta) =>
         setState((s) => {
           const prev = s.dealDNA[dealId];
           if (prev?.exitDay != null) return s; // already finalized — don't double-count
@@ -640,7 +685,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             dealId, uwScore: 2, brokerRelAtLOI: 50, sellerPersonaId: '', brokerPersonaId: '', psaCatchScore: 0,
             ddDepth: 'moderate', lenderChosen: '', raiseStructure: 'solo', businessPlan: 'value-add', closingScore: 0, amDecisions: [],
           };
-          const dna: DealDNA = { ...base, projectedIRR, actualIRR, exitDay: s.day };
+          const dna: DealDNA = { ...base, projectedIRR, actualIRR, exitDay: s.day, ...meta };
           return { ...s, dealDNA: { ...s.dealDNA, [dealId]: dna }, playerModel: updatePlayerModel(s.playerModel, dna) };
         }),
       applyGameOutcome: (o) =>

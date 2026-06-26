@@ -306,6 +306,8 @@ export function buildNapkinScenarios(ctx: EarlyCtx): Scenario[] {
 export function buildLOIScenarios(ctx: EarlyCtx): Scenario[] {
   const tight = ctx.market === 'hot';
   const winOdds = tight ? 0.5 : 0.7;
+  const certaintyOdds = tight ? 0.62 : 0.78;
+  const hard = ctx.difficulty === 'expert';
 
   const competing: Scenario = {
     id: 'loi-competing-buyer',
@@ -329,7 +331,118 @@ export function buildLOIScenarios(ctx: EarlyCtx): Scenario[] {
     },
   };
 
-  // Seller motivation/intel now fires at the napkin/review stage (sellerIntel) where it belongs — at
-  // LOI you're already positioning against competition, so this stage is just the competing-buyer beat.
-  return [competing];
+  const certainty: Scenario = {
+    id: 'loi-certainty-proof',
+    title: 'Seller asks for certainty proof',
+    entry: 'p1',
+    steps: {
+      p1: {
+        id: 'p1',
+        speaker: 'Seller counsel',
+        prompt:
+          'The seller wants proof you can close: source-of-funds backup, lender signals, and a tighter timeline. How do you respond?',
+        options: [
+          {
+            id: 'full-proof',
+            label: 'Provide full proof package + tighter close path',
+            detail: 'More prep work now, stronger credibility.',
+            tone: 'good',
+            effects: { days: 1, rep: { broker: 2 }, set: { loiCertaintyStrong: true } },
+            branches: [
+              {
+                weight: certaintyOdds,
+                result: 'The seller marks you as the most executable buyer.',
+                effects: { set: { certaintyLead: true } },
+              },
+              {
+                weight: 1 - certaintyOdds,
+                result: 'They still want better economics, but you stay at the top of the stack.',
+              },
+            ],
+          },
+          {
+            id: 'light-proof',
+            label: 'Share a light package and keep optionality',
+            detail: 'Less effort now, weaker signaling.',
+            tone: 'warn',
+            branches: [
+              {
+                weight: 0.55,
+                result: 'Seller accepts the package but asks for tougher terms later.',
+                effects: { days: 1 },
+              },
+              {
+                weight: 0.45,
+                result: 'Seller doubts execution certainty and elevates the competing buyer.',
+                effects: { rep: { broker: -1 } },
+              },
+            ],
+          },
+        ],
+      },
+    },
+  };
+
+  const emdPressure: Scenario = {
+    id: 'loi-emd-pressure',
+    title: 'EMD hardening pressure',
+    entry: 'e1',
+    steps: {
+      e1: {
+        id: 'e1',
+        speaker: 'Broker',
+        prompt:
+          'The seller asks for earlier hard money to prove commitment. This increases your downside if DD uncovers surprises.',
+        options: [
+          {
+            id: 'harden-early',
+            label: 'Harden EMD earlier and shorten DD',
+            detail: 'Improves win odds, raises execution risk.',
+            tone: 'warn',
+            branches: [
+              {
+                weight: hard ? 0.5 : 0.62,
+                result: 'Seller values certainty and pushes your LOI ahead of a higher price.',
+                effects: { rep: { broker: 2 }, set: { emdHardenedEarly: true } },
+              },
+              {
+                weight: hard ? 0.5 : 0.38,
+                result: 'Seller still pushes for price. You gave certainty without fully winning economics.',
+                effects: { days: 1 },
+              },
+            ],
+          },
+          {
+            id: 'balanced-middle',
+            label: 'Offer a balanced compromise (partial hard money)',
+            detail: 'Share risk without overexposing yourself.',
+            tone: 'good',
+            effects: { set: { emdCompromise: true }, rep: { broker: 1 } },
+            result: 'You structure partial hard money and preserve some downside protection.',
+          },
+          {
+            id: 'refuse-harden',
+            label: 'Refuse hard money and hold DD protection',
+            detail: 'Protects downside, may weaken position.',
+            tone: 'warn',
+            branches: [
+              {
+                weight: tight ? 0.35 : 0.55,
+                result: 'Seller accepts your discipline and keeps negotiating.',
+              },
+              {
+                weight: tight ? 0.65 : 0.45,
+                result: 'Seller interprets this as low certainty and pivots to another buyer.',
+                effects: { rep: { broker: -2 } },
+              },
+            ],
+          },
+        ],
+      },
+    },
+  };
+
+  // Seller motivation/intel now fires at the napkin/review stage (sellerIntel). LOI focuses on
+  // competitive positioning, certainty signaling, and EMD/timeline risk tradeoffs.
+  return [competing, certainty, emdPressure];
 }
