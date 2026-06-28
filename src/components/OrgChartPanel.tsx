@@ -27,6 +27,9 @@ import {
 } from '@/lib/sim';
 
 interface ClassAInvestor { id: string; name: string; amount: number }
+/** A node in a custom org sub-structure (recursive): an entity or person, optional capital + note
+ *  (role / share class), with its own owners beneath it. Powers owner items 7 & 8. */
+interface OrgNode { id: string; name: string; note?: string; amount?: number; children?: OrgNode[] }
 interface OrgChartState {
   ownershipEntity: string;
   managerEntity: string;
@@ -36,9 +39,14 @@ interface OrgChartState {
   classA: ClassAInvestor[];
   /** override total equity (else from UW) */
   totalEquityOverride?: number;
+  /** extra entities / layers (e.g. a pref-equity group bringing money via its own entity + share class) — #7 */
+  customGroups?: OrgNode[];
+  /** sub-owners / sub-structure under each Class B (GP) member, keyed by GP member id — #8 */
+  classBSub?: Record<string, OrgNode[]>;
 }
 
 const aid = () => `a${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
+const nid = () => `n${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
 const DISCLOSURE = 0.2; // lenders flag any member at ≥20% (≥10% for foreign persons)
 
 export function OrgChartPanel({ deal }: { deal: MarketDeal }) {
@@ -89,6 +97,8 @@ export function OrgChartPanel({ deal }: { deal: MarketDeal }) {
   const setA = (id: string, patch: Partial<ClassAInvestor>) => setState((s) => ({ ...s, classA: s.classA.map((a) => (a.id === id ? { ...a, ...patch } : a)) }));
   const delA = (id: string) => setState((s) => ({ ...s, classA: s.classA.filter((a) => a.id !== id) }));
   const setCoinvest = (memberId: string, amount: number) => setState((s) => ({ ...s, gpCoinvest: { ...s.gpCoinvest, [memberId]: amount } }));
+  const setCustomGroups = (groups: OrgNode[]) => setState((s) => ({ ...s, customGroups: groups }));
+  const setClassBSub = (memberId: string, nodes: OrgNode[]) => setState((s) => ({ ...s, classBSub: { ...s.classBSub, [memberId]: nodes } }));
 
   return (
     <section className="rounded-xl border border-slate-200 bg-white">
@@ -172,17 +182,45 @@ export function OrgChartPanel({ deal }: { deal: MarketDeal }) {
               <div className="mb-1 flex items-center gap-1.5 text-xs font-bold text-emerald-800">Class B members <InfoTip title="Class B members" what="The GP entities — the sponsorship team's LLCs. They manage the deal and typically co-invest some capital. Their profit comes mostly from the GP split (see GP Roles & Splits), but they also hold a capital ownership % here." /> <span className="ml-auto font-normal text-emerald-600">{pct(ownPct(classBTotal), 0)} · {usd(classBTotal, { compact: true })}</span></div>
               <p className="mb-2 text-[11px] text-emerald-700/70">GP entities (co-invest) — seeded from GP Roles</p>
               <div className="space-y-1.5">
-                {classB.map((b) => (
-                  <div key={b.id} className="flex items-center gap-1.5 rounded-md bg-white px-2 py-1 ring-1 ring-emerald-100">
-                    <span className="min-w-0 flex-1 truncate px-1 text-xs text-slate-700">{b.name}</span>
-                    <MoneyInput value={b.amount} onChange={(v) => setCoinvest(b.id, v)} ariaLabel={`${b.name} co-invest`} className="w-24 rounded border border-slate-200 px-1 py-0.5 text-right text-xs tabular-nums focus:outline-none" />
-                    <span className="w-12 text-right text-[11px] tabular-nums text-slate-500">{pct(ownPct(b.amount), 1)}</span>
-                  </div>
-                ))}
+                {classB.map((b) => {
+                  const sub = state.classBSub?.[b.id] ?? [];
+                  return (
+                    <div key={b.id} className="rounded-md bg-white px-2 py-1.5 ring-1 ring-emerald-100">
+                      <div className="flex items-center gap-1.5">
+                        <span className="min-w-0 flex-1 truncate px-1 text-xs text-slate-700">{b.name}</span>
+                        <MoneyInput value={b.amount} onChange={(v) => setCoinvest(b.id, v)} ariaLabel={`${b.name} co-invest`} className="w-24 rounded border border-slate-200 px-1 py-0.5 text-right text-xs tabular-nums focus:outline-none" />
+                        <span className="w-12 text-right text-[11px] tabular-nums text-slate-500">{pct(ownPct(b.amount), 1)}</span>
+                      </div>
+                      {/* #8 — this GP entity's own owners / sub-structure */}
+                      {sub.length > 0 && (
+                        <div className="mt-1 ml-1 border-l-2 border-emerald-100 pl-1">
+                          {sub.map((n) => (
+                            <OrgNodeEditor key={n.id} node={n} depth={1}
+                              onChange={(nc) => setClassBSub(b.id, sub.map((x) => (x.id === n.id ? nc : x)))}
+                              onRemove={() => setClassBSub(b.id, sub.filter((x) => x.id !== n.id))} />
+                          ))}
+                        </div>
+                      )}
+                      <button onClick={() => setClassBSub(b.id, [...sub, { id: nid(), name: 'New owner / member' }])} className="mt-0.5 text-[10px] text-emerald-700 hover:underline">+ add owner / sub-entity</button>
+                    </div>
+                  );
+                })}
               </div>
-              <p className="mt-2 text-[11px] text-emerald-700/70">Edit entity names in GP Roles &amp; Splits.</p>
+              <p className="mt-2 text-[11px] text-emerald-700/70">Entity names come from GP Roles &amp; Splits; add the owners under each entity above.</p>
             </div>
           </div>
+        </div>
+
+        {/* Custom entities & layers (owner #7) */}
+        <div className="mt-4 rounded-xl border border-dashed border-violet-300 bg-violet-50/30 p-3">
+          <div className="mb-1 flex items-center gap-1.5 text-xs font-bold text-violet-800">Additional entities &amp; layers <InfoTip title="Custom entities / layers" what="Add structure beyond the standard Class A / Class B — for example a preferred-equity group that brings money through its own entity holding a separate class of shares, with its own owners beneath it. Each entity can nest owners to any depth." /></div>
+          <p className="mb-2 text-[11px] text-violet-700/70">For a pref-equity entity, a JV partner, a fund-of-funds, or any group that owns through its own structure / share class.</p>
+          {(state.customGroups ?? []).map((g) => (
+            <OrgNodeEditor key={g.id} node={g} depth={0}
+              onChange={(nc) => setCustomGroups((state.customGroups ?? []).map((x) => (x.id === g.id ? nc : x)))}
+              onRemove={() => setCustomGroups((state.customGroups ?? []).filter((x) => x.id !== g.id))} />
+          ))}
+          <button onClick={() => setCustomGroups([...(state.customGroups ?? []), { id: nid(), name: 'New entity / group', note: 'e.g. Pref Equity LLC · Class C shares' }])} className="mt-1 rounded-md border border-dashed border-violet-300 px-2 py-1 text-[11px] font-medium text-violet-700 hover:bg-violet-50">+ Add entity / layer</button>
         </div>
 
         <p className="mt-4 text-[10px] leading-relaxed text-slate-400">
@@ -190,6 +228,31 @@ export function OrgChartPanel({ deal }: { deal: MarketDeal }) {
         </p>
       </div>
     </section>
+  );
+}
+
+/** Recursive entity/owner editor — name + capital + role/share-class note + nested owners (#7, #8). */
+function OrgNodeEditor({ node, depth, onChange, onRemove }: { node: OrgNode; depth: number; onChange: (n: OrgNode) => void; onRemove: () => void }) {
+  const children = node.children ?? [];
+  return (
+    <div className={`rounded-md border border-slate-200 bg-white p-1.5 ${depth > 0 ? 'mt-1' : 'mb-1'}`}>
+      <div className="flex items-center gap-1.5">
+        <input value={node.name} onChange={(e) => onChange({ ...node, name: e.target.value })} placeholder="Entity / person" className="min-w-0 flex-1 rounded border border-transparent px-1 py-0.5 text-xs font-medium text-slate-700 hover:border-slate-200 focus:border-slate-300 focus:outline-none" />
+        <MoneyInput value={node.amount ?? 0} onChange={(v) => onChange({ ...node, amount: v })} ariaLabel={`${node.name} capital`} className="w-24 rounded border border-slate-200 px-1 py-0.5 text-right text-xs tabular-nums focus:outline-none" />
+        <button onClick={() => onChange({ ...node, children: [...children, { id: nid(), name: 'New owner' }] })} className="shrink-0 text-[10px] text-sky-600 hover:underline" title="Add owner beneath this entity">+ sub</button>
+        <button onClick={onRemove} className="shrink-0 text-slate-300 hover:text-red-500" title="Remove">✕</button>
+      </div>
+      <input value={node.note ?? ''} onChange={(e) => onChange({ ...node, note: e.target.value })} placeholder="role / entity type / share class (e.g. Texas LLC · Class C)" className="mt-1 w-full rounded border border-slate-100 px-1 py-0.5 text-[10px] text-slate-500 focus:border-slate-300 focus:outline-none" />
+      {children.length > 0 && (
+        <div className="mt-1 ml-1 border-l-2 border-slate-100 pl-1">
+          {children.map((c) => (
+            <OrgNodeEditor key={c.id} node={c} depth={depth + 1}
+              onChange={(nc) => onChange({ ...node, children: children.map((x) => (x.id === c.id ? nc : x)) })}
+              onRemove={() => onChange({ ...node, children: children.filter((x) => x.id !== c.id) })} />
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
