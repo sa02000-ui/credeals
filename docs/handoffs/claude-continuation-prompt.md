@@ -35,6 +35,11 @@ Current simulator baseline already added:
 - Expanded LOI storylets in `buildLOIScenarios` (competition + certainty proof + EMD pressure)
 - Expanded AM shock content (market/weather/geopolitical) in `src/lib/sim/amCards.ts`
 - Added tests for phase transitions and content (`phaseTransitions.test.ts`, updates in `gameDesign.test.ts`)
+- Dynamic broker-call ad-lib engine (`evaluateBrokerAdlib`) with typed + microphone input in `BrokerCallModal`
+- LOI storylets now seller-persona-sensitive (`loi-seller-style-read`) and LOI modal includes approach + custom note
+- PSA flow now includes post-redline negotiation recovery (`resolvePSANegotiation`) before signing
+- AM UI now includes risk radar + next-quarter uncertainty signal + variable card volume
+- Added tests for broker ad-lib + PSA negotiation (`brokerAndPsa.test.ts`)
 
 Important parallel-work note:
 - Another agent may be changing distribution/waterfall model logic.
@@ -46,11 +51,15 @@ Next implementation priorities:
    - include loan baseline in attribution,
    - include market/weather/geopolitical shock tags,
    - include Exit_Buyer utility model.
-2) Ensure deterministic branching for all weighted choices in game/simulation paths.
-3) Implement optional variability mode (`deterministic|stochastic`) for external-factor divergence.
-4) Expand scenario/content packs with template-driven structure per phase (denser LOI + AM decisions).
-5) Add replay/decision-log hooks needed for debrief timeline.
-6) Add tests:
+2) Increase visual game feel:
+   - stronger encounter visuals/animation,
+   - clearer tension UX around time/competition,
+   - richer feedback loops for wins/losses.
+3) Ensure deterministic branching for all weighted choices in game/simulation paths.
+4) Implement optional variability mode (`deterministic|stochastic`) for external-factor divergence.
+5) Expand scenario/content packs with template-driven structure per phase (denser LOI + AM decisions + broker variety).
+6) Add replay/decision-log hooks needed for debrief timeline.
+7) Add tests:
    - transition validity
    - deterministic replay parity
    - branch threshold/utility sanity

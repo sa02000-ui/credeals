@@ -61,3 +61,56 @@ export function buildPSA(difficulty: Difficulty): PSAClause[] {
 
 /** Day budget for a Contract-to-Close run (read by the C2C deck for the on-time closing check). */
 export const C2C_DAY_BUDGET = 75;
+
+export type PSANegotiationStance = 'aggressive' | 'balanced' | 'accommodating';
+
+export interface PSANegotiationResult {
+  salvaged: number;
+  unresolved: number;
+  message: string;
+  lesson: string;
+}
+
+/**
+ * Resolve post-redline negotiation with seller counsel:
+ * - "salvaged" = number of previously-missed traps recovered during negotiation.
+ * - "unresolved" = residual latent trap count that carries into closing risk.
+ */
+export function resolvePSANegotiation(args: {
+  caughtCount: number;
+  missedCount: number;
+  stance: PSANegotiationStance;
+  difficulty: Difficulty;
+}): PSANegotiationResult {
+  const total = args.caughtCount + args.missedCount;
+  const detectionRate = total > 0 ? args.caughtCount / total : 0.5;
+  const stanceBoost =
+    args.stance === 'aggressive' ? 0.18 : args.stance === 'balanced' ? 0.12 : 0.06;
+  const difficultyPenalty =
+    args.difficulty === 'expert' ? 0.08 : args.difficulty === 'standard' ? 0.04 : 0;
+  const salvageRate = Math.max(0, Math.min(0.9, detectionRate * 0.45 + stanceBoost - difficultyPenalty));
+  const salvaged = Math.min(args.missedCount, Math.round(args.missedCount * salvageRate));
+  const unresolved = Math.max(0, args.missedCount - salvaged);
+
+  if (salvaged === 0) {
+    return {
+      salvaged,
+      unresolved,
+      message:
+        'Seller counsel held the line. Your missed clauses stayed largely in place.',
+      lesson:
+        'Spotting traps early is still the highest-leverage move; negotiation cannot always rescue missed language.',
+    };
+  }
+  return {
+    salvaged,
+    unresolved,
+    message: `Counsel accepted revisions on ${salvaged} previously missed clause${salvaged === 1 ? '' : 's'}.`,
+    lesson:
+      args.stance === 'aggressive'
+        ? 'Strong redlines can recover protection, but they rely on prepared support and timing.'
+        : args.stance === 'balanced'
+          ? 'A balanced negotiation recovered protections without overextending the process.'
+          : 'A cooperative tone can still recover risk if your factual support is credible.',
+  };
+}

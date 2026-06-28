@@ -1,7 +1,13 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import type { PSAClause } from '@/lib/sim';
+import {
+  resolvePSANegotiation,
+  type Difficulty,
+  type PSAClause,
+  type PSANegotiationResult,
+  type PSANegotiationStance,
+} from '@/lib/sim';
 
 /**
  * E2 — PSA "catch the trap". The player flags the clauses they think hurt them; on submit we reveal
@@ -10,16 +16,20 @@ import type { PSAClause } from '@/lib/sim';
 export function PSARedlineModal({
   dealName,
   clauses,
+  difficulty,
   onDone,
   onClose,
 }: {
   dealName: string;
   clauses: PSAClause[];
+  difficulty: Difficulty;
   onDone: (caughtIds: string[], missedIds: string[]) => void;
   onClose: () => void;
 }) {
   const [flagged, setFlagged] = useState<Set<string>>(new Set());
   const [submitted, setSubmitted] = useState(false);
+  const [stance, setStance] = useState<PSANegotiationStance>('balanced');
+  const [negotiation, setNegotiation] = useState<PSANegotiationResult | null>(null);
 
   const toggle = (id: string) => setFlagged((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
 
@@ -30,6 +40,15 @@ export function PSARedlineModal({
     const fp = clauses.filter((c) => !c.sneaky && flagged.has(c.id)).length;
     return { sneakyTotal: sneaky.length, caught: caughtIds, missed: missedIds, falsePos: fp };
   }, [clauses, flagged]);
+
+  const finalCaught = useMemo(() => {
+    if (!negotiation) return caught;
+    return [...caught, ...missed.slice(0, negotiation.salvaged)];
+  }, [caught, missed, negotiation]);
+  const finalMissed = useMemo(() => {
+    if (!negotiation) return missed;
+    return missed.slice(negotiation.salvaged);
+  }, [missed, negotiation]);
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4" onClick={onClose}>
@@ -78,12 +97,47 @@ export function PSARedlineModal({
             </div>
           ) : (
             <div className="flex items-center justify-between gap-3">
-              <div className="text-sm">
+              <div className="text-sm space-y-1">
                 <span className="font-semibold text-emerald-700">Caught {caught.length}/{sneakyTotal} traps</span>
                 {missed.length > 0 && <span className="ml-2 text-red-600">· {missed.length} missed (latent risk)</span>}
                 {falsePos > 0 && <span className="ml-2 text-slate-400">· {falsePos} over-flagged</span>}
+                {negotiation && (
+                  <div className="text-xs text-slate-600">
+                    Negotiation recovered <b>{negotiation.salvaged}</b> missed clause(s). Residual latent risk: <b>{finalMissed.length}</b>.
+                    <div className="mt-0.5 text-slate-500">{negotiation.message} {negotiation.lesson}</div>
+                  </div>
+                )}
               </div>
-              <button onClick={() => onDone(caught, missed)} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700">Sign &amp; start the close →</button>
+              {!negotiation ? (
+                <div className="flex items-center gap-2">
+                  <select
+                    value={stance}
+                    onChange={(e) => setStance(e.target.value as PSANegotiationStance)}
+                    className="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-700"
+                  >
+                    <option value="aggressive">Aggressive redline</option>
+                    <option value="balanced">Balanced redline</option>
+                    <option value="accommodating">Accommodating redline</option>
+                  </select>
+                  <button
+                    onClick={() =>
+                      setNegotiation(
+                        resolvePSANegotiation({
+                          caughtCount: caught.length,
+                          missedCount: missed.length,
+                          stance,
+                          difficulty,
+                        }),
+                      )
+                    }
+                    className="rounded-lg border border-violet-300 bg-violet-50 px-3 py-2 text-xs font-semibold text-violet-700 hover:bg-violet-100"
+                  >
+                    Negotiate contract terms
+                  </button>
+                </div>
+              ) : (
+                <button onClick={() => onDone(finalCaught, finalMissed)} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700">Sign &amp; start the close →</button>
+              )}
             </div>
           )}
         </div>

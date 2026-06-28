@@ -224,7 +224,15 @@ export function LOIPanel({ deal }: { deal: MarketDeal }) {
 
   const emdPct = f.emdAmount / Math.max(1, f.purchasePrice);
   const negTerms: LOITerms = { price: f.purchasePrice, emdPct, ddDays: f.ddDays, closeDays: f.closeDays, financingContingency: f.finContingencyEnabled, nonRefundableEmd: f.nonRefundTrigger === 'psa', titlePayer: f.titlePayer };
-  const loiScenarios = useMemo(() => buildLOIScenarios({ market: game.market, difficulty: difficulty ?? 'standard' }), [game.market, difficulty]);
+  const loiScenarios = useMemo(
+    () =>
+      buildLOIScenarios({
+        market: game.market,
+        difficulty: difficulty ?? 'standard',
+        seller,
+      }),
+    [game.market, difficulty, seller],
+  );
 
   function onLoiAccepted(finalTerms: LOITerms) {
     set({
@@ -433,7 +441,15 @@ export function LOIPanel({ deal }: { deal: MarketDeal }) {
       {negotiating && (
         <LOINegotiationModal dealName={deal.name} askPrice={deal.askPrice} seller={seller} initialTerms={negTerms} onAccepted={onLoiAccepted} onLost={onLoiLost} onClose={() => setNegotiating(false)} />
       )}
-      {psaClauses && <PSARedlineModal dealName={deal.name} clauses={psaClauses} onDone={onPsaDone} onClose={() => setPsaClauses(null)} />}
+      {psaClauses && (
+        <PSARedlineModal
+          dealName={deal.name}
+          clauses={psaClauses}
+          difficulty={difficulty ?? 'standard'}
+          onDone={onPsaDone}
+          onClose={() => setPsaClauses(null)}
+        />
+      )}
 
       {celebrate && (
         <CelebrationModal

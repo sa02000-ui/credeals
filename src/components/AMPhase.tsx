@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import { useApp } from '@/lib/store';
 import { useDealLocal } from '@/lib/hooks/useDealLocal';
 import { CalibrationReview } from '@/components/CalibrationReview';
-import { computeExitOutcome, dealExitBuyer, defaultDetailedInputs, deriveSeed, drawAMCards, evaluateExitOutcome, seededRng, usd, type AMCard, type AMEffect, type AMOption, type DetailedUWInputs, type MarketDeal, type VariabilityMode } from '@/lib/sim';
+import { AM_CARDS, computeExitOutcome, dealExitBuyer, defaultDetailedInputs, deriveSeed, drawAMCards, evaluateExitOutcome, seededRng, usd, type AMCard, type AMEffect, type AMOption, type DetailedUWInputs, type MarketDeal, type VariabilityMode } from '@/lib/sim';
 
 /** E-AM — the quarterly Asset Management card phase (design doc Part 3). Game mode. */
 export function AMPhase({ deal }: { deal: MarketDeal }) {
@@ -80,7 +80,17 @@ function AMQuarter({ deal, am, est, dna, weakSpots, seed, applyAMEffect, advance
   const cards = useMemo(() => {
     if (!seed) return [];
     const firedIds = am.decisions.filter((d) => d.quarter < am.quarter).map((d) => d.cardId);
-    return drawAMCards({ quarter: am.quarter, seed, dna, firedIds, weakSpots, count: am.quarter === 1 ? 1 : 2 });
+    const countRng = seededRng(deriveSeed(seed.value, deal.id, am.quarter, 'am-card-count'));
+    const base = am.quarter === 1 ? 1 : 2;
+    const extra = am.quarter >= 3 && countRng() > 0.6 ? 1 : 0;
+    return drawAMCards({
+      quarter: am.quarter,
+      seed,
+      dna,
+      firedIds,
+      weakSpots,
+      count: Math.min(4, base + extra),
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [am.quarter, seed?.value]);
 
@@ -92,6 +102,32 @@ function AMQuarter({ deal, am, est, dna, weakSpots, seed, applyAMEffect, advance
 
   const projectedNOI = est.noi;
   const noiDelta = am.noiCurrent - projectedNOI;
+  const riskRadar = useMemo(() => {
+    if (!seed) return null;
+    const nextQuarter = am.quarter + 1;
+    const idx = seed.curveballQuarters.indexOf(nextQuarter);
+    if (idx < 0) return null;
+    const cardId = seed.curveballDeck[idx];
+    const card = AM_CARDS.find((c) => c.id === cardId);
+    return {
+      nextQuarter,
+      cardId,
+      deck: card?.deck ?? 'market',
+      title: card?.title ?? 'Emerging risk event',
+    };
+  }, [seed, am.quarter]);
+  const stressIndex = Math.max(
+    0,
+    Math.min(
+      100,
+      Math.round(
+        (game.market === 'tough' ? 42 : game.market === 'balanced' ? 28 : 18) +
+          (am.activeFlags.length * 8) +
+          (am.occupancy < 0.88 ? 16 : 0) +
+          (noiDelta < 0 ? 12 : 0),
+      ),
+    ),
+  );
 
   return (
     <div className="rounded-xl border-2 border-teal-300 bg-teal-50/30">
@@ -105,6 +141,20 @@ function AMQuarter({ deal, am, est, dna, weakSpots, seed, applyAMEffect, advance
         <Stat label="NOI (annual)" value={usd(am.noiCurrent, { compact: true })} tone={noiDelta >= 0 ? 'good' : 'bad'} />
         <Stat label="vs. proforma" value={`${noiDelta >= 0 ? '+' : ''}${usd(noiDelta, { compact: true })}`} tone={noiDelta >= 0 ? 'good' : 'bad'} />
         <Stat label="Last distribution" value={am.cashFlowHistory.length ? usd(am.cashFlowHistory[am.cashFlowHistory.length - 1].amount, { compact: true }) : '—'} />
+      </div>
+      <div className="mx-3 rounded-lg border border-indigo-200 bg-indigo-50/60 px-3 py-2">
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <span className="font-semibold text-indigo-700">Risk radar</span>
+          <span className="text-slate-600">Stress index:</span>
+          <span className={`rounded px-1.5 py-0.5 font-semibold ${stressIndex >= 70 ? 'bg-red-100 text-red-700' : stressIndex >= 45 ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>{stressIndex}/100</span>
+          {riskRadar ? (
+            <span className="text-slate-600">
+              Next-quarter uncertainty signal: <b className="text-indigo-800">{riskRadar.deck}</b> event likely (Q{riskRadar.nextQuarter}).
+            </span>
+          ) : (
+            <span className="text-slate-500">No flagged curveball next quarter — but market volatility can still create surprises.</span>
+          )}
+        </div>
       </div>
 
       {/* this quarter's cards */}

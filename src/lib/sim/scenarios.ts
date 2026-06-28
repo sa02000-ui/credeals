@@ -308,6 +308,34 @@ export function buildLOIScenarios(ctx: EarlyCtx): Scenario[] {
   const winOdds = tight ? 0.5 : 0.7;
   const certaintyOdds = tight ? 0.62 : 0.78;
   const hard = ctx.difficulty === 'expert';
+  const sellerId = ctx.seller?.id ?? 'seller-tired';
+  const sellerSignals: Record<string, { prompt: string; best: string; bad: string }> = {
+    'seller-distressed': {
+      prompt:
+        'Seller signal: speed and certainty beat hero pricing. They are timeline-constrained and fear a failed close.',
+      best: 'Emphasize certainty package (proof of funds + shorter path + practical contingencies).',
+      bad: 'Lead with an aggressive lowball and broad optionality.',
+    },
+    'seller-institutional': {
+      prompt:
+        "Seller signal: process discipline, low drama, and execution reliability. They won't tolerate sloppy papering.",
+      best: 'Lead with institutional execution language and clean deliverables.',
+      bad: 'Push informal language and ask for open-ended optionality.',
+    },
+    'seller-unrealistic': {
+      prompt:
+        'Seller signal: anchored pricing expectations. Progress requires disciplined framing, not emotional chasing.',
+      best: 'Anchor to data and keep your walk-away discipline explicit.',
+      bad: 'Bid against yourself without structure.',
+    },
+    'seller-tired': {
+      prompt:
+        'Seller signal: wants a clean handoff and minimal friction. They respond to practical, low-drama terms.',
+      best: 'Present straightforward terms and a smooth closing plan.',
+      bad: 'Overcomplicate terms and lawyer-heavy posturing.',
+    },
+  };
+  const sellerSignal = sellerSignals[sellerId] ?? sellerSignals['seller-tired'];
 
   const competing: Scenario = {
     id: 'loi-competing-buyer',
@@ -326,6 +354,37 @@ export function buildLOIScenarios(ctx: EarlyCtx): Scenario[] {
             { weight: 0.6, result: 'The seller respects the discipline and stays at the table.', effects: { rep: { broker: 1 } } },
             { weight: 0.4, result: 'You lose the early look, but you did not overpay for someone else’s upside.', effects: { days: 1 } },
           ] },
+        ],
+      },
+    },
+  };
+
+  const styleRead: Scenario = {
+    id: 'loi-seller-style-read',
+    title: 'Read the seller style before you send',
+    entry: 's1',
+    steps: {
+      s1: {
+        id: 's1',
+        speaker: 'Broker',
+        prompt: sellerSignal.prompt,
+        options: [
+          {
+            id: 'align',
+            label: sellerSignal.best,
+            detail: 'Match your positioning to this specific seller profile.',
+            tone: 'good',
+            effects: { rep: { broker: 2 }, set: { sellerStyleRead: true } },
+            result: 'Your framing fits this seller; the broker trusts you understand who is across the table.',
+          },
+          {
+            id: 'misread',
+            label: sellerSignal.bad,
+            detail: 'Can work occasionally, but usually damages credibility.',
+            tone: 'warn',
+            effects: { rep: { broker: -1 } },
+            result: 'You misread the counterparty style. The broker now expects a bumpier negotiation.',
+          },
         ],
       },
     },
@@ -444,5 +503,5 @@ export function buildLOIScenarios(ctx: EarlyCtx): Scenario[] {
 
   // Seller motivation/intel now fires at the napkin/review stage (sellerIntel). LOI focuses on
   // competitive positioning, certainty signaling, and EMD/timeline risk tradeoffs.
-  return [competing, certainty, emdPressure];
+  return [styleRead, competing, certainty, emdPressure];
 }
