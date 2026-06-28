@@ -227,6 +227,12 @@ export interface DealFile {
   kind: DealFileKind;
   sizeBytes: number;
   ts: number;
+  /** which lifecycle step this document relates to (undefined = standalone, not tied to a step) */
+  phase?: DealStage;
+  /** id of the specific task/reminder this document is attached to (undefined = not task-specific) */
+  taskId?: string;
+  /** human label of that task/step, for display in the repository */
+  taskLabel?: string;
 }
 
 // --- Buy-box matching ---

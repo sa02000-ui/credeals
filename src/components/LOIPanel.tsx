@@ -287,7 +287,7 @@ export function LOIPanel({ deal }: { deal: MarketDeal }) {
   function onUploadExecuted(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    addFiles(deal.id, [{ id: `${deal.id}-loi-${Date.now()}`, name: file.name, kind: 'LOI', sizeBytes: file.size, ts: Date.now() }]);
+    addFiles(deal.id, [{ id: `${deal.id}-loi-${Date.now()}`, name: file.name, kind: 'LOI', sizeBytes: file.size, ts: Date.now(), phase: 'loi', taskLabel: 'Executed LOI' }]);
     e.target.value = '';
   }
 

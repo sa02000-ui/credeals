@@ -169,7 +169,7 @@ export function C2CPanel({ deal }: { deal: MarketDeal }) {
   function onPickPsa(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
     if (!f) return;
-    addFiles(deal.id, [{ id: `${deal.id}-psa-${Date.now()}`, name: f.name, kind: 'PSA', sizeBytes: f.size, ts: Date.now() }]);
+    addFiles(deal.id, [{ id: `${deal.id}-psa-${Date.now()}`, name: f.name, kind: 'PSA', sizeBytes: f.size, ts: Date.now(), phase: 'c2c', taskId: 'psa', taskLabel: 'Signed PSA' }]);
     e.target.value = '';
   }
 
@@ -362,9 +362,12 @@ interface Reminder {
   nextDue: string;
   lastDone?: string;
   assignee?: string;
+  comment?: string;
 }
 interface QuarterLog { id: string; period: string; occupancy: number; noi: number; distribution: number; notes: string }
-interface AMState { takeover: Record<string, boolean>; takeoverCollapsed: boolean; reminders: Reminder[]; quarters: QuarterLog[]; seeded: boolean }
+/** A completed occurrence of a task — kept so finished work shows in a "Completed" list, not vanishes. */
+interface CompletedTask { id: string; label: string; date: string; comment?: string; by?: string }
+interface AMState { takeover: Record<string, boolean>; takeoverCollapsed: boolean; reminders: Reminder[]; quarters: QuarterLog[]; seeded: boolean; completedLog?: CompletedTask[] }
 
 const TAKEOVER = [
   'Property visit + arrange services',
@@ -395,11 +398,20 @@ function seedReminders(): Reminder[] {
 }
 
 export function AMPanel({ deal }: { deal: MarketDeal }) {
-  const { peopleOf, mode } = useApp();
+  const { peopleOf, mode, filesOf, addFiles } = useApp();
   const people = peopleOf(deal.id);
   const [state, setState] = useDealLocal<AMState>('am', deal.id, { takeover: {}, takeoverCollapsed: false, reminders: [], quarters: [], seeded: false });
   const reminders = state.seeded ? state.reminders : seedReminders();
+  const completedLog = state.completedLog ?? [];
   const [tab, setTab] = useState<'reminders' | 'quarterly'>('reminders');
+  const [openTask, setOpenTask] = useState<string | null>(null);
+  const filesForTask = (taskId: string) => filesOf(deal.id).filter((f) => f.taskId === taskId);
+  function attachToTask(taskId: string, label: string, e: React.ChangeEvent<HTMLInputElement>) {
+    const picked = Array.from(e.target.files ?? []);
+    e.target.value = '';
+    if (picked.length === 0) return;
+    addFiles(deal.id, picked.map((file) => ({ id: `${deal.id}-${file.name}-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`, name: file.name, kind: 'Other' as const, sizeBytes: file.size, ts: Date.now(), phase: 'am' as const, taskId, taskLabel: label })));
+  }
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -408,12 +420,17 @@ export function AMPanel({ deal }: { deal: MarketDeal }) {
     setState((s) => ({ ...s, seeded: true, reminders: fn(s.seeded ? s.reminders : seedReminders()) }));
   }
   function completeReminder(id: string) {
-    mutateReminders((list) => list.map((r) => {
-      if (r.id !== id) return r;
-      const next = new Date(); next.setDate(next.getDate() + CADENCE_DAYS[r.cadence]);
-      return { ...r, lastDone: new Date().toISOString().slice(0, 10), nextDue: next.toISOString().slice(0, 10) };
+    const r = reminders.find((x) => x.id === id);
+    const todayIso = new Date().toISOString().slice(0, 10);
+    // Log the completion so finished work shows in the "Completed" list rather than just vanishing.
+    if (r) setState((s) => ({ ...s, completedLog: [{ id: `c${Date.now()}`, label: r.label, date: todayIso, comment: r.comment, by: r.assignee }, ...(s.completedLog ?? [])].slice(0, 100) }));
+    mutateReminders((list) => list.map((x) => {
+      if (x.id !== id) return x;
+      const next = new Date(); next.setDate(next.getDate() + CADENCE_DAYS[x.cadence]);
+      return { ...x, lastDone: todayIso, nextDue: next.toISOString().slice(0, 10) };
     }));
   }
+  const clearCompleted = () => setState((s) => ({ ...s, completedLog: [] }));
   const updateReminder = (id: string, patch: Partial<Reminder>) => mutateReminders((list) => list.map((r) => (r.id === id ? { ...r, ...patch } : r)));
   const addReminder = (label: string, cadence: Cadence) => mutateReminders((list) => [...list, { id: `r${Date.now()}`, label, cadence, nextDue: new Date().toISOString().slice(0, 10) }]);
   const removeReminder = (id: string) => mutateReminders((list) => list.filter((r) => r.id !== id));
@@ -473,25 +490,57 @@ export function AMPanel({ deal }: { deal: MarketDeal }) {
               const due = new Date(r.nextDue + 'T00:00:00');
               const overdue = due < today;
               const soon = !overdue && (due.getTime() - today.getTime()) / 86400000 <= 14;
+              const atts = filesForTask(r.id);
+              const expanded = openTask === r.id;
               return (
-                <div key={r.id} className="flex flex-wrap items-center gap-2 rounded-md border border-slate-100 px-3 py-2 text-sm">
-                  <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${cadenceColor(r.cadence)}`}>{r.cadence}</span>
-                  <span className="text-slate-700">{r.label}</span>
-                  {r.info && <InfoTip k={r.info} />}
-                  <div className="ml-auto flex items-center gap-2">
-                    <input type="date" value={r.nextDue} onChange={(e) => updateReminder(r.id, { nextDue: e.target.value })} className={`rounded border px-1.5 py-0.5 text-xs tabular-nums focus:outline-none ${overdue ? 'border-red-300 text-red-600' : soon ? 'border-amber-300 text-amber-600' : 'border-slate-200 text-slate-600'}`} />
-                    <select value={r.assignee ?? ''} onChange={(e) => updateReminder(r.id, { assignee: e.target.value || undefined })} className="max-w-[110px] rounded border border-slate-200 px-1 py-0.5 text-xs focus:outline-none">
-                      <option value="">Unassigned</option>
-                      {people.map((p) => (<option key={p.id} value={p.name}>{p.name}</option>))}
-                    </select>
-                    <button onClick={() => completeReminder(r.id)} className="rounded-md border border-emerald-300 px-2 py-0.5 text-xs font-medium text-emerald-700 hover:bg-emerald-50">Done</button>
-                    <button onClick={() => removeReminder(r.id)} className="text-slate-300 hover:text-red-500" title="Remove">✕</button>
+                <div key={r.id} className="rounded-md border border-slate-100">
+                  <div className="flex flex-wrap items-center gap-2 px-3 py-2 text-sm">
+                    <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${cadenceColor(r.cadence)}`}>{r.cadence}</span>
+                    <span className="text-slate-700">{r.label}</span>
+                    {r.info && <InfoTip k={r.info} />}
+                    <button onClick={() => setOpenTask(expanded ? null : r.id)} className={`text-xs ${r.comment || atts.length ? 'text-sky-600' : 'text-slate-300 hover:text-sky-600'}`} title="Comments & documents">💬{atts.length > 0 ? ` 📎${atts.length}` : ''}</button>
+                    <div className="ml-auto flex items-center gap-2">
+                      <input type="date" value={r.nextDue} onChange={(e) => updateReminder(r.id, { nextDue: e.target.value })} className={`rounded border px-1.5 py-0.5 text-xs tabular-nums focus:outline-none ${overdue ? 'border-red-300 text-red-600' : soon ? 'border-amber-300 text-amber-600' : 'border-slate-200 text-slate-600'}`} />
+                      <select value={r.assignee ?? ''} onChange={(e) => updateReminder(r.id, { assignee: e.target.value || undefined })} className="max-w-[110px] rounded border border-slate-200 px-1 py-0.5 text-xs focus:outline-none">
+                        <option value="">Unassigned</option>
+                        {people.map((p) => (<option key={p.id} value={p.name}>{p.name}</option>))}
+                      </select>
+                      <button onClick={() => completeReminder(r.id)} className="rounded-md border border-emerald-300 px-2 py-0.5 text-xs font-medium text-emerald-700 hover:bg-emerald-50">Done</button>
+                      <button onClick={() => removeReminder(r.id)} className="text-slate-300 hover:text-red-500" title="Remove">✕</button>
+                    </div>
                   </div>
+                  {expanded && (
+                    <div className="space-y-2 border-t border-slate-100 bg-slate-50/60 p-2">
+                      <textarea value={r.comment ?? ''} onChange={(e) => updateReminder(r.id, { comment: e.target.value })} placeholder="Notes / status update for this task…" className="h-14 w-full rounded border border-slate-200 px-2 py-1 text-xs focus:border-slate-400 focus:outline-none" />
+                      <div className="flex flex-wrap items-center gap-2">
+                        <label className="cursor-pointer rounded-md border border-slate-300 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-100">📎 Attach document<input type="file" multiple className="hidden" onChange={(e) => attachToTask(r.id, r.label, e)} /></label>
+                        {atts.map((f) => (<span key={f.id} className="rounded bg-white px-1.5 py-0.5 text-[10px] text-slate-600 ring-1 ring-slate-200" title={`${Math.max(1, Math.round(f.sizeBytes / 1024))} KB`}>{f.name}</span>))}
+                        {atts.length > 0 && <span className="text-[10px] text-slate-400">also in 📁 Documents, tagged to this task</span>}
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })}
           </div>
           <AddReminder onAdd={addReminder} />
+
+          {/* Completed — finished work stays visible here instead of disappearing */}
+          {completedLog.length > 0 && (
+            <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50/40 p-3">
+              <div className="mb-1 flex items-center gap-2 text-xs font-bold text-emerald-800">✅ Completed <span className="rounded-full bg-white px-2 py-0.5 text-[10px] text-emerald-700">{completedLog.length}</span><button onClick={clearCompleted} className="ml-auto text-[10px] text-slate-400 hover:text-red-500">clear history</button></div>
+              <ul className="space-y-1">
+                {completedLog.map((c) => (
+                  <li key={c.id} className="flex flex-wrap items-center gap-2 rounded bg-white px-2 py-1 text-xs ring-1 ring-emerald-100">
+                    <span className="text-slate-500 line-through">{c.label}</span>
+                    {c.by && <span className="text-[10px] text-slate-400">· {c.by}</span>}
+                    {c.comment && <span className="text-[10px] text-slate-500">— {c.comment}</span>}
+                    <span className="ml-auto text-[10px] text-slate-400">{new Date(c.date + 'T00:00:00').toLocaleDateString()}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       )}
 

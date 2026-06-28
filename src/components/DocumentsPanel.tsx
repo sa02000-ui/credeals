@@ -15,6 +15,9 @@ const KIND_LABEL: Record<DealFileKind, string> = {
   PSA: 'Purchase & Sale Agreement',
   Other: 'Other documents',
 };
+const PHASE_LABEL: Record<string, string> = {
+  napkin: 'Napkin UW', detailed: 'Detailed UW', loi: 'LOI', c2c: 'Contract-to-Close', am: 'Asset Mgmt',
+};
 const KIND_BADGE: Record<DealFileKind, string> = {
   T12: 'bg-indigo-100 text-indigo-700',
   RentRoll: 'bg-violet-100 text-violet-700',
@@ -79,6 +82,13 @@ export function DocumentsPanel({ deal }: { deal: MarketDeal }) {
                 {list.map((f: DealFile) => (
                   <li key={f.id} className="flex items-center gap-2 rounded-md border border-slate-100 px-3 py-1.5 text-sm">
                     <span className="truncate text-slate-700">{f.name}</span>
+                    {f.taskLabel ? (
+                      <span className="shrink-0 rounded bg-teal-100 px-1.5 py-0.5 text-[9px] font-medium text-teal-700" title={`Attached to a task${f.phase ? ` in ${PHASE_LABEL[f.phase] ?? f.phase}` : ''}`}>🔗 {f.taskLabel}</span>
+                    ) : f.phase ? (
+                      <span className="shrink-0 rounded bg-indigo-100 px-1.5 py-0.5 text-[9px] font-medium text-indigo-700">{PHASE_LABEL[f.phase] ?? f.phase}</span>
+                    ) : (
+                      <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[9px] text-slate-400" title="Not tied to a step or task">standalone</span>
+                    )}
                     <span className="ml-auto shrink-0 text-[11px] text-slate-400">{Math.max(1, Math.round(f.sizeBytes / 1024))} KB · {new Date(f.ts).toLocaleDateString()}</span>
                   </li>
                 ))}
@@ -87,7 +97,7 @@ export function DocumentsPanel({ deal }: { deal: MarketDeal }) {
           );
         })}
       </div>
-      <p className="border-t border-slate-100 p-3 text-[11px] text-slate-400">Files are catalogued by name/type now; cloud storage with preview &amp; download (Supabase Storage) wires in with AI parsing.</p>
+      <p className="border-t border-slate-100 p-3 text-[11px] text-slate-400">Each file shows whether it&apos;s tied to a <span className="text-teal-700">task</span>, a <span className="text-indigo-700">step</span>, or is standalone. Documents attached from a step or AM task land here automatically. Cloud storage with preview &amp; download (Supabase Storage) wires in with AI parsing.</p>
     </section>
   );
 }
