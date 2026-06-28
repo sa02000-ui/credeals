@@ -137,18 +137,17 @@ export function OrgChartPanel({ deal }: { deal: MarketDeal }) {
         <div className="mt-4 flex flex-col items-center">
           <Box tone="slate" title="The Property" sub={`${deal.name} · ${deal.city}, ${deal.state}`} />
           <Connector />
-          <Box tone="indigo" title={state.ownershipEntity} sub="Ownership Entity · owns 100%" />
-          <Connector />
+          <Box tone="indigo" title={state.ownershipEntity} sub="Ownership Entity (Holding LLC) · owns 100% of the Property" />
 
-          {/* Manager arm */}
-          <div className="mb-1 w-full max-w-md rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-center">
-            <div className="text-xs font-semibold text-violet-800">{state.managerEntity}</div>
-            <div className="text-[11px] text-violet-600">Manager Entity · non-member manager</div>
-            <input value={state.managerNames} onChange={(e) => setState((s) => ({ ...s, managerNames: e.target.value }))} className="mt-1 w-full rounded border border-violet-200 bg-white px-2 py-0.5 text-center text-[11px] focus:outline-none" placeholder="Managers (names)" />
+          {/* Manager is the NON-MEMBER manager of the Holding LLC — a side arm, not an owner. */}
+          <div className="mt-1 w-full max-w-md rounded-lg border border-violet-200 bg-violet-50 px-3 py-1.5 text-center">
+            <div className="text-[11px] text-violet-700"><b>Managed by:</b> {state.managerEntity} <span className="text-violet-500">· non-member manager</span></div>
+            <input value={state.managerNames} onChange={(e) => setState((s) => ({ ...s, managerNames: e.target.value }))} className="mt-1 w-full rounded border border-violet-200 bg-white px-2 py-0.5 text-center text-[11px] focus:outline-none" placeholder="Manager(s) names" />
           </div>
           <Connector />
+          <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Members of {state.ownershipEntity}</div>
 
-          {/* Members: two columns */}
+          {/* Members: Class A + Class B are the members (owners) of the Holding LLC */}
           <div className="grid w-full grid-cols-1 gap-3 md:grid-cols-2">
             {/* Class A — LPs */}
             <div className="rounded-xl border border-sky-200 bg-sky-50/40 p-3">

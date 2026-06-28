@@ -138,6 +138,15 @@ export interface GPMember {
   alloc: Record<string, number>;
 }
 
+/** The headline deal economics, each pulled from the Detailed UW but overridable here. An undefined
+ *  field is "linked" (shows the live UW number); a defined field is a manual override (link broken). */
+export interface GPKeyNumbers {
+  dealSize?: number;
+  gpProfit?: number; // total GP profit to split (the pool)
+  acqFee?: number; // acquisition fee at closing
+  amFees?: number; // asset-management fees over the life of the deal
+}
+
 export interface GPTeamState {
   /** overall GP share of the deal (the GP/LP split GP side), decimal */
   gpPct: number;
@@ -148,6 +157,8 @@ export interface GPTeamState {
   totalGPProfit: number;
   /** when true, totalGPProfit + price are pulled from the Detailed-UW base scenario */
   linkToUW: boolean;
+  /** per-field overrides of the UW-linked key numbers (undefined = linked) */
+  keyNumbers?: GPKeyNumbers;
 }
 
 export const DEFAULT_GP_PCT = 0.3;
@@ -168,6 +179,7 @@ export function defaultGPTeam(sponsorName: string): GPTeamState {
     members: [{ id: 'sponsor', name: sponsorName || 'You (Sponsor)', alloc: { ...emptyAlloc(), sourcing: 1 } }],
     totalGPProfit: 0,
     linkToUW: true,
+    keyNumbers: {},
   };
 }
 

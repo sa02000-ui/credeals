@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useApp } from '@/lib/store';
 import { learn } from '@/lib/learn/glossary';
 
@@ -25,7 +25,11 @@ export function InfoTip({
   /** 'onColor' = white circle + dark "i", for use on solid-colored section headers (legible contrast) */
   variant?: 'default' | 'onColor';
 }) {
-  const [open, setOpen] = useState(false);
+  // Hover opens transiently; a click PINS it open until you click elsewhere (owner: make it "stick").
+  const [hovered, setHovered] = useState(false);
+  const [pinned, setPinned] = useState(false);
+  const open = hovered || pinned;
+  const ref = useRef<HTMLSpanElement>(null);
   const { learnTip } = useApp();
   const entry = k ? learn(k) : undefined;
   const t = title ?? entry?.title ?? 'About';
@@ -36,13 +40,21 @@ export function InfoTip({
   useEffect(() => {
     if (open && tipKey) learnTip(tipKey);
   }, [open, tipKey, learnTip]);
+  // While pinned, a click anywhere outside this tip dismisses it.
+  useEffect(() => {
+    if (!pinned) return;
+    const onDoc = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setPinned(false); };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [pinned]);
   if (!w && !a) return null;
 
   return (
     <span
+      ref={ref}
       className={`relative inline-flex ${className}`}
-      onMouseEnter={() => setOpen(true)}
-      onMouseLeave={() => setOpen(false)}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
     >
       <button
         type="button"
@@ -50,7 +62,7 @@ export function InfoTip({
         onClick={(e) => {
           e.preventDefault();
           e.stopPropagation();
-          setOpen((v) => !v);
+          setPinned((v) => !v);
         }}
         className={`grid h-4 w-4 place-items-center rounded-full text-[10px] font-bold leading-none ${
           variant === 'onColor'

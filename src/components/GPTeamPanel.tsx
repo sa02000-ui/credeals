@@ -26,22 +26,27 @@ import {
   runDetailedUW,
   runGPTeam,
   usd,
+  type GPKeyNumbers,
   type GPTeamState,
   type MarketDeal,
 } from '@/lib/sim';
 
 const mid = () => `m${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
 
-/** Pull GP profit + purchase price from the Detailed-UW base scenario (robust to legacy/missing state). */
-function useUWlink(deal: MarketDeal): { gpProfit: number; purchasePrice: number; ok: boolean } {
+interface UWNumbers { dealSize: number; gpProfit: number; acqFee: number; amFees: number; ok: boolean }
+/** Pull the headline economics from the Detailed-UW base scenario (robust to legacy/missing state). */
+function useUWlink(deal: MarketDeal): UWNumbers {
   const [scenarios] = useDealLocal<{ id: string; name: string; inputs: unknown }[]>('uw-scenarios-v2', deal.id, []);
   return useMemo(() => {
     const base = (scenarios[0]?.inputs as ReturnType<typeof defaultDetailedInputs> | undefined) ?? defaultDetailedInputs(deal);
     try {
       const r = runDetailedUW(base);
-      return { gpProfit: Math.max(0, Math.round(r.gpProfit + r.acqFee)), purchasePrice: base.purchasePrice, ok: scenarios.length > 0 };
+      const amFees = r.years.reduce((a, y) => a + y.egi * STANDARD_FEES.assetManagement, 0);
+      // The pool the matrix splits = all GP economics: profit/promote + co-invest profit + acq fee + AM fees.
+      const gpProfit = Math.max(0, Math.round(r.gpProfit + amFees));
+      return { dealSize: base.purchasePrice, gpProfit, acqFee: Math.round(r.acqFee), amFees: Math.round(amFees), ok: scenarios.length > 0 };
     } catch {
-      return { gpProfit: 0, purchasePrice: deal.askPrice, ok: false };
+      return { dealSize: deal.askPrice, gpProfit: 0, acqFee: 0, amFees: 0, ok: false };
     }
   }, [scenarios, deal]);
 }
@@ -51,15 +56,19 @@ export function GPTeamPanel({ deal }: { deal: MarketDeal }) {
   const people = peopleOf(deal.id);
   const [state, setState] = useDealLocal<GPTeamState>('gpteam', deal.id, defaultGPTeam('You (Sponsor)'));
   const link = useUWlink(deal);
-
-  // Effective pool + price: linked to UW unless the user overrode it.
-  const totalGPProfit = state.linkToUW ? link.gpProfit : state.totalGPProfit;
-  const price = link.purchasePrice;
-  const bracket = acqFeeBracket(price);
+  const kn = state.keyNumbers ?? {};
+  // Effective key numbers: the UW value unless the user has overridden the field here.
+  const dealSize = kn.dealSize ?? link.dealSize;
+  const pool = kn.gpProfit ?? link.gpProfit; // total GP profit pool the matrix splits
+  const acqFee = kn.acqFee ?? link.acqFee;
+  const amFees = kn.amFees ?? link.amFees;
+  const bracket = acqFeeBracket(dealSize);
+  const setKey = (field: keyof GPKeyNumbers, v: number) => setState((s) => ({ ...s, keyNumbers: { ...s.keyNumbers, [field]: v } }));
+  const resetKey = (field: keyof GPKeyNumbers) => setState((s) => { const next: GPKeyNumbers = { ...s.keyNumbers }; delete next[field]; return { ...s, keyNumbers: next }; });
 
   const result = useMemo(
-    () => runGPTeam({ ...state, totalGPProfit }),
-    [state, totalGPProfit],
+    () => runGPTeam({ ...state, totalGPProfit: pool }),
+    [state, pool],
   );
 
   const weightSumOff = Math.abs(result.weightSum - 1) > 0.001;
@@ -96,8 +105,8 @@ export function GPTeamPanel({ deal }: { deal: MarketDeal }) {
       </div>
 
       <div className="p-4">
-        {/* Top controls */}
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        {/* GP/LP split + acq-fee bracket */}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="rounded-lg border border-slate-200 p-3">
             <div className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-slate-600">GP / LP split <InfoTip title="GP / LP split" what="How profit divides between the General Partners (the sponsors who run the deal) and the Limited Partners (the passive investors who fund it). 30/70 is a common starting point — 30% of profit to the GP, 70% to the LPs who put up most of the cash." app="This split sizes the GP profit pool that the roles matrix below divides among your partners." /></div>
             <div className="flex items-center gap-2">
@@ -106,25 +115,23 @@ export function GPTeamPanel({ deal }: { deal: MarketDeal }) {
               <span className="ml-auto text-xs text-slate-400">{pct(1 - state.gpPct, 0)} to LPs</span>
             </div>
           </div>
-
           <div className="rounded-lg border border-slate-200 p-3">
-            <div className="mb-1 flex items-center justify-between text-xs font-semibold text-slate-600">
-              <span>GP profit pool</span>
-              <label className="flex items-center gap-1 text-[11px] font-normal text-slate-500">
-                <input type="checkbox" checked={state.linkToUW} onChange={(e) => setState((s) => ({ ...s, linkToUW: e.target.checked }))} className="h-3 w-3" />
-                link to UW
-              </label>
-            </div>
-            {state.linkToUW ? (
-              <div className="text-sm tabular-nums text-slate-800">{usd(totalGPProfit)}<span className="ml-1 text-[11px] text-slate-400">{link.ok ? 'from Detailed UW' : '(run Detailed UW)'}</span></div>
-            ) : (
-              <MoneyInput value={state.totalGPProfit} onChange={(v) => setState((s) => ({ ...s, totalGPProfit: v }))} ariaLabel="GP profit pool" className="w-full rounded border border-slate-300 px-2 py-1 text-right text-sm tabular-nums focus:outline-none" />
-            )}
+            <div className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-slate-600">Acquisition-fee bracket <InfoTip title="Acquisition fee" what="A one-time fee the GP earns at closing for sourcing and executing the acquisition, sized as a % of purchase price. Smaller deals justify a higher % because the work is similar but the base is smaller." /></div>
+            <div className="text-sm tabular-nums text-slate-800">{pct(bracket.pct, 1)} · {usd(dealSize * bracket.pct)}<span className="ml-1 text-[11px] text-slate-400">on {usd(dealSize, { compact: true })}</span></div>
           </div>
+        </div>
 
-          <div className="rounded-lg border border-slate-200 p-3">
-            <div className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-slate-600">Acquisition fee <InfoTip title="Acquisition fee" what="A one-time fee the GP earns at closing for sourcing and executing the acquisition, sized as a % of purchase price. Smaller deals justify a higher % because the work is similar but the base is smaller." app="The bracket for this deal's price is highlighted below." /></div>
-            <div className="text-sm tabular-nums text-slate-800">{pct(bracket.pct, 1)} · {usd(price * bracket.pct)}<span className="ml-1 text-[11px] text-slate-400">on {usd(price, { compact: true })}</span></div>
+        {/* Key deal numbers — linked to the Detailed UW, editable here (owner #1, #9) */}
+        <div className="mt-3">
+          <div className="mb-1 flex flex-wrap items-center gap-1.5 text-xs font-semibold text-slate-600">
+            Key deal numbers <InfoTip title="Key deal numbers" what="The headline economics that drive the split: deal size, total GP profit (the pool), the acquisition fee, and asset-management fees over the life of the deal." app="These pull live from your Detailed UW. Edit any of them to override (the box turns amber and the link breaks); press ↺ to re-link to the UW." />
+            <span className="font-normal text-slate-400">— from Detailed UW; edit to override, ↺ to re-link</span>
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <KeyCard label="Deal size" value={dealSize} overridden={kn.dealSize != null} onSet={(v) => setKey('dealSize', v)} onReset={() => resetKey('dealSize')} ok={link.ok} />
+            <KeyCard label="Total GP profit (pool)" value={pool} overridden={kn.gpProfit != null} onSet={(v) => setKey('gpProfit', v)} onReset={() => resetKey('gpProfit')} ok={link.ok} />
+            <KeyCard label="Acquisition fee" value={acqFee} overridden={kn.acqFee != null} onSet={(v) => setKey('acqFee', v)} onReset={() => resetKey('acqFee')} ok={link.ok} />
+            <KeyCard label="AM fees (life of deal)" value={amFees} overridden={kn.amFees != null} onSet={(v) => setKey('amFees', v)} onReset={() => resetKey('amFees')} ok={link.ok} />
           </div>
         </div>
 
@@ -150,7 +157,7 @@ export function GPTeamPanel({ deal }: { deal: MarketDeal }) {
                   <th key={b.id} className="px-1 py-1 text-center font-medium">
                     <div className="flex items-center justify-center gap-0.5">{b.short}<InfoTip title={b.label} what={b.blurb} app={b.flag} /></div>
                     <div className="mt-0.5 flex items-center justify-center gap-0.5">
-                      <input type="number" min={0} max={100} value={+(((state.weights[b.id] ?? 0) * 100).toFixed(1))} onChange={(e) => setWeight(b.id, Number(e.target.value))} className="w-11 rounded border border-slate-200 px-1 py-0.5 text-center text-[11px] tabular-nums focus:outline-none" title={`Weight — suggested ${pct(b.rangeLo, 0)}–${pct(b.rangeHi, 0)}`} />
+                      <input type="number" min={0} max={100} value={+(((state.weights[b.id] ?? 0) * 100).toFixed(1))} onChange={(e) => setWeight(b.id, Number(e.target.value))} className={`w-11 rounded border px-1 py-0.5 text-center text-[11px] tabular-nums focus:outline-none ${weightSumOff ? 'border-red-400 bg-red-50' : 'border-slate-200'}`} title={`Weight — suggested ${pct(b.rangeLo, 0)}–${pct(b.rangeHi, 0)}`} />
                       <span className="text-[9px] text-slate-400">wt</span>
                     </div>
                     <div className="text-[9px] font-normal text-slate-300">{pct(b.rangeLo, 0)}–{pct(b.rangeHi, 0)}</div>
@@ -186,14 +193,29 @@ export function GPTeamPanel({ deal }: { deal: MarketDeal }) {
                 {GP_BUCKETS.map((b) => {
                   const fill = result.bucketFill[b.id];
                   const off = Math.abs(fill - 1) > 0.001;
-                  return <td key={b.id} className={`px-1 py-1.5 text-center tabular-nums ${off ? 'text-amber-600' : 'text-emerald-600'}`}>{pct(fill, 0)}</td>;
+                  return <td key={b.id} className={`px-1 py-1.5 text-center tabular-nums ${off ? 'rounded bg-red-100 font-bold text-red-700' : 'text-emerald-600'}`}>{pct(fill, 0)}</td>;
                 })}
                 <td className="px-2 py-1.5 text-right tabular-nums">{pct(result.gpShareSum, 0)}</td>
                 <td className="px-2 py-1.5 text-right tabular-nums">{pct(state.gpPct * result.gpShareSum, 0)}</td>
-                <td className="px-2 py-1.5 text-right tabular-nums text-emerald-700">{usd(totalGPProfit * result.gpShareSum)}</td>
+                <td className="px-2 py-1.5 text-right tabular-nums text-emerald-700">{usd(pool * result.gpShareSum)}</td>
                 <td />
               </tr>
             </tfoot>
+          </table>
+        </div>
+
+        {/* GP economics summary — life of deal (owner #2) */}
+        <div className="mt-4 rounded-lg border border-slate-200 p-3 sm:max-w-md">
+          <div className="mb-1 text-xs font-semibold text-slate-600">GP economics — life of deal</div>
+          <table className="w-full text-sm">
+            <tbody className="tabular-nums">
+              <SumRow k="Deal size (purchase price)" v={usd(dealSize)} />
+              <SumRow k="Total GP profit (the pool below)" v={usd(pool)} bold />
+              <SumRow k="• Acquisition fee (at closing)" v={usd(acqFee)} muted />
+              <SumRow k="• Asset-management fees (life)" v={usd(amFees)} muted />
+              <SumRow k="Allocated to partners" v={usd(pool * result.gpShareSum)} />
+              <SumRow k="Unallocated" v={usd(pool * (1 - result.gpShareSum))} warn={result.gpShareSum < 0.999} />
+            </tbody>
           </table>
         </div>
 
@@ -227,6 +249,32 @@ export function GPTeamPanel({ deal }: { deal: MarketDeal }) {
         </div>
       </div>
     </section>
+  );
+}
+
+function KeyCard({ label, value, overridden, onSet, onReset, ok }: { label: string; value: number; overridden: boolean; onSet: (n: number) => void; onReset: () => void; ok: boolean }) {
+  return (
+    <div className={`rounded-lg border p-2 ${overridden ? 'border-amber-400 bg-amber-50' : 'border-slate-200'}`}>
+      <div className="flex items-center justify-between gap-1 text-[10px] uppercase tracking-wide text-slate-400">
+        <span className="truncate">{label}</span>
+        {overridden ? (
+          <button onClick={onReset} className="shrink-0 font-semibold text-amber-700 hover:underline" title="Reset to the Detailed UW value (re-link)">↺ reset</button>
+        ) : (
+          <span className="shrink-0 text-emerald-500" title="Linked to Detailed UW">🔗</span>
+        )}
+      </div>
+      <MoneyInput value={value} onChange={onSet} ariaLabel={label} className={`mt-0.5 w-full rounded border px-1.5 py-1 text-right text-sm font-semibold tabular-nums focus:outline-none ${overridden ? 'border-amber-300 bg-white' : 'border-slate-200'}`} />
+      {!ok && !overridden && <div className="mt-0.5 text-[9px] text-amber-600">run Detailed UW to populate</div>}
+    </div>
+  );
+}
+
+function SumRow({ k, v, bold, muted, warn }: { k: string; v: string; bold?: boolean; muted?: boolean; warn?: boolean }) {
+  return (
+    <tr className="border-t border-slate-50">
+      <td className={`py-1 pr-2 text-left ${bold ? 'font-semibold text-slate-800' : muted ? 'pl-2 text-slate-400' : 'text-slate-600'}`}>{k}</td>
+      <td className={`py-1 text-right ${bold ? 'font-bold text-slate-900' : warn ? 'font-semibold text-amber-600' : 'text-slate-700'}`}>{v}</td>
+    </tr>
   );
 }
 
