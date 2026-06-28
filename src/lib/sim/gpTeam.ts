@@ -136,7 +136,14 @@ export interface GPMember {
   entity?: string;
   /** % of each bucket this member takes, keyed by bucket id (decimal, 0..1) */
   alloc: Record<string, number>;
+  /** $ amounts for dollar-entry buckets (risk money, equity raise); the alloc % is derived pro-rata
+   *  from the column total. Keyed by bucket id. */
+  dollars?: Record<string, number>;
 }
+
+/** Buckets entered as DOLLARS (the % is computed pro-rata of the column total) rather than as a % —
+ *  Risk Money and the Fund-Manager/IR bucket (the equity-raise column). */
+export const DOLLAR_BUCKETS = ['risk', 'fundmgr'];
 
 /** The headline deal economics, each pulled from the Detailed UW but overridable here. An undefined
  *  field is "linked" (shows the live UW number); a defined field is a manual override (link broken). */

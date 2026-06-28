@@ -17,6 +17,7 @@ import { InfoTip } from '@/components/InfoTip';
 import { MoneyInput } from '@/components/MoneyInput';
 import {
   ACQ_FEE_LADDER,
+  DOLLAR_BUCKETS,
   GP_BUCKETS,
   STANDARD_FEES,
   acqFeeBracket,
@@ -82,6 +83,14 @@ export function GPTeamPanel({ deal }: { deal: MarketDeal }) {
     }));
   const setWeight = (bucketId: string, pctVal: number) =>
     setState((s) => ({ ...s, weights: { ...s.weights, [bucketId]: clamp01(pctVal / 100) } }));
+  // Dollar-entry buckets: store the $ and derive each member's alloc % pro-rata of the column total.
+  const setDollar = (memberId: string, bucketId: string, amount: number) =>
+    setState((s) => {
+      const members = s.members.map((m) => (m.id === memberId ? { ...m, dollars: { ...m.dollars, [bucketId]: amount } } : m));
+      const total = members.reduce((a, m) => a + (m.dollars?.[bucketId] ?? 0), 0);
+      return { ...s, members: members.map((m) => ({ ...m, alloc: { ...m.alloc, [bucketId]: total > 0 ? (m.dollars?.[bucketId] ?? 0) / total : 0 } })) };
+    });
+  const dollarTotal = (bucketId: string) => state.members.reduce((a, m) => a + (m.dollars?.[bucketId] ?? 0), 0);
   const addMember = (name: string, entity?: string) =>
     setState((s) => ({ ...s, members: [...s.members, { id: mid(), name, entity, alloc: Object.fromEntries(GP_BUCKETS.map((b) => [b.id, 0])) }] }));
   const renameMember = (id: string, name: string) => setState((s) => ({ ...s, members: s.members.map((m) => (m.id === id ? { ...m, name } : m)) }));
@@ -155,7 +164,7 @@ export function GPTeamPanel({ deal }: { deal: MarketDeal }) {
                 <th className="px-2 py-1 text-left font-medium">Partner</th>
                 {GP_BUCKETS.map((b) => (
                   <th key={b.id} className="px-1 py-1 text-center font-medium">
-                    <div className="flex items-center justify-center gap-0.5">{b.short}<InfoTip title={b.label} what={b.blurb} app={b.flag} /></div>
+                    <div className="flex items-center justify-center gap-0.5">{b.short}{DOLLAR_BUCKETS.includes(b.id) && <span className="text-[9px] text-emerald-600">($)</span>}<InfoTip title={b.label} what={b.blurb} app={b.flag} /></div>
                     <div className="mt-0.5 flex items-center justify-center gap-0.5">
                       <input type="number" min={0} max={100} value={+(((state.weights[b.id] ?? 0) * 100).toFixed(1))} onChange={(e) => setWeight(b.id, Number(e.target.value))} className={`w-11 rounded border px-1 py-0.5 text-center text-[11px] tabular-nums focus:outline-none ${weightSumOff ? 'border-red-400 bg-red-50' : 'border-slate-200'}`} title={`Weight — suggested ${pct(b.rangeLo, 0)}–${pct(b.rangeHi, 0)}`} />
                       <span className="text-[9px] text-slate-400">wt</span>
@@ -177,7 +186,14 @@ export function GPTeamPanel({ deal }: { deal: MarketDeal }) {
                   </td>
                   {GP_BUCKETS.map((b) => (
                     <td key={b.id} className="px-1 py-1.5 text-center">
-                      <input type="number" min={0} max={100} value={+(((member.alloc[b.id] ?? 0) * 100).toFixed(1))} onChange={(e) => setAlloc(member.id, b.id, Number(e.target.value))} className="w-12 rounded border border-slate-200 px-1 py-0.5 text-center text-xs tabular-nums focus:border-slate-400 focus:outline-none" />
+                      {DOLLAR_BUCKETS.includes(b.id) ? (
+                        <div>
+                          <MoneyInput value={member.dollars?.[b.id] ?? 0} onChange={(v) => setDollar(member.id, b.id, v)} ariaLabel={`${member.name} ${b.short} dollars`} className="w-20 rounded border border-slate-200 px-1 py-0.5 text-right text-xs tabular-nums focus:border-slate-400 focus:outline-none" />
+                          <div className="text-[9px] text-slate-400">{pct(member.alloc[b.id] ?? 0, 0)}</div>
+                        </div>
+                      ) : (
+                        <input type="number" min={0} max={100} value={+(((member.alloc[b.id] ?? 0) * 100).toFixed(1))} onChange={(e) => setAlloc(member.id, b.id, Number(e.target.value))} className="w-12 rounded border border-slate-200 px-1 py-0.5 text-center text-xs tabular-nums focus:border-slate-400 focus:outline-none" />
+                      )}
                     </td>
                   ))}
                   <td className="px-2 py-1.5 text-right tabular-nums text-slate-600">{pct(gpShare, 1)}</td>
@@ -193,6 +209,9 @@ export function GPTeamPanel({ deal }: { deal: MarketDeal }) {
                 {GP_BUCKETS.map((b) => {
                   const fill = result.bucketFill[b.id];
                   const off = Math.abs(fill - 1) > 0.001;
+                  if (DOLLAR_BUCKETS.includes(b.id)) {
+                    return <td key={b.id} className="px-1 py-1.5 text-center text-[10px] tabular-nums text-slate-600">{usd(dollarTotal(b.id), { compact: true })}</td>;
+                  }
                   return <td key={b.id} className={`px-1 py-1.5 text-center tabular-nums ${off ? 'rounded bg-red-100 font-bold text-red-700' : 'text-emerald-600'}`}>{pct(fill, 0)}</td>;
                 })}
                 <td className="px-2 py-1.5 text-right tabular-nums">{pct(result.gpShareSum, 0)}</td>
