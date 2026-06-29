@@ -12,6 +12,7 @@ import { negotiateLOI, usd, type LOITerms, type NegResult, type Persona } from '
  * buyer pressure rises with the market and with rounds dragging on, not with a stopwatch.
  */
 type Msg = { role: 'you' | 'seller'; text: string; tone: 'neutral' | 'good' | 'bad' };
+type Approach = 'assertive' | 'balanced' | 'collaborative';
 
 function termSummary(t: LOITerms, askPrice: number): string {
   const off = (((askPrice - t.price) / askPrice) * 100).toFixed(1);
@@ -42,22 +43,42 @@ export function LOINegotiationModal({
   onLost: () => void;
   onClose: () => void;
 }) {
-  const { game, advanceDays, day } = useApp();
+  const { game, applyGameOutcome, advanceDays, day } = useApp();
   const [terms, setTerms] = useState<LOITerms>({ nonRefundableEmd: false, titlePayer: 'seller', ...initialTerms });
   const [round, setRound] = useState(1);
   const [cp, setCp] = useState(0);
   const [result, setResult] = useState<NegResult | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [thread, setThread] = useState<Msg[]>([]);
+  const [approach, setApproach] = useState<Approach>('balanced');
+  const [note, setNote] = useState('');
 
   const isCounter = result?.outcome === 'counter';
 
   function send(currentTerms: LOITerms) {
     setSubmitting(true);
-    const youMsg: Msg = { role: 'you', text: termSummary(currentTerms, askPrice), tone: 'neutral' };
+    const approachLine =
+      approach === 'assertive'
+        ? 'assertive stance'
+        : approach === 'collaborative'
+          ? 'collaborative stance'
+          : 'balanced stance';
+    const youMsg: Msg = {
+      role: 'you',
+      text: `${termSummary(currentTerms, askPrice)} · ${approachLine}${note.trim() ? ` · note: "${note.trim()}"` : ''}`,
+      tone: 'neutral',
+    };
     advanceDays(2); // the broker relays your terms; the seller responds a few days later
-    const responsiveness = Math.max(0.5, 1 - 0.1 * (round - 1));
+    let responsiveness = Math.max(0.5, 1 - 0.1 * (round - 1));
+    if (approach === 'collaborative') responsiveness += 0.1;
+    if (approach === 'assertive') responsiveness -= 0.05;
+    if (/certainty|close|proof|funded|timeline/i.test(note)) responsiveness += 0.08;
+    if (/cheap|discount|urgent low|take it or leave it/i.test(note)) responsiveness -= 0.1;
+    responsiveness = Math.max(0.35, Math.min(1, responsiveness));
     const r = negotiateLOI({ terms: currentTerms, askPrice, seller, market: game.market, brokerRep: game.reputation.broker, responsiveness, round, competingPressure: cp });
+    const repDelta =
+      approach === 'collaborative' ? 1 : approach === 'assertive' ? -1 : 0;
+    if (repDelta !== 0) applyGameOutcome({ repDelta: { broker: repDelta } });
     setCp(r.competingPressure);
     setResult(r);
     const tone = r.outcome === 'accepted' ? 'good' : r.outcome === 'counter' ? 'neutral' : 'bad';
@@ -118,6 +139,25 @@ export function LOINegotiationModal({
 
         {/* term editor */}
         <div className="mt-3 grid grid-cols-2 gap-2 rounded-lg border border-slate-200 p-3 text-sm">
+          <Field label="Negotiation approach">
+            <select
+              value={approach}
+              onChange={(e) => setApproach(e.target.value as Approach)}
+              className="w-full rounded-md border border-slate-300 px-2 py-1 text-sm focus:outline-none"
+            >
+              <option value="balanced">Balanced</option>
+              <option value="collaborative">Collaborative</option>
+              <option value="assertive">Assertive</option>
+            </select>
+          </Field>
+          <Field label="Message to seller/broker (optional)">
+            <input
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="e.g., Proof of funds ready, clean timeline, can wire EMD immediately."
+              className="w-full rounded-md border border-slate-300 px-2 py-1 text-sm focus:outline-none"
+            />
+          </Field>
           <Field label="Offer price">
             <input type="number" value={terms.price} step={50_000} onChange={(e) => set({ price: Number(e.target.value) })} className="w-full rounded-md border border-slate-300 px-2 py-1 text-sm tabular-nums focus:outline-none" />
             <div className="text-[10px] text-slate-400">ask {usd(askPrice, { compact: true })} · {(((askPrice - terms.price) / askPrice) * 100).toFixed(1)}% off</div>

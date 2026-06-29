@@ -73,6 +73,105 @@ export const AM_CARDS: AMCard[] = [
       { id: 'steady', label: 'Keep rents steady', detail: 'Prioritize occupancy.', tone: 'warn', effects: {}, result: 'You hold rents and keep the building full.' },
     ],
   },
+  {
+    id: 'weather-event-response', deck: 'market', speaker: 'Operations alert',
+    title: 'Severe weather event hits the submarket',
+    prompt: 'A major storm disrupted access, displaced some residents, and stressed building systems. Response quality will define exit perception.',
+    options: [
+      {
+        id: 'rapid-response',
+        label: 'Mobilize rapid response + resident support plan',
+        detail: 'Higher immediate cost, stronger long-run trust and retention.',
+        tone: 'good',
+        branches: [
+          {
+            weight: 0.7,
+            result: 'Execution is strong. You stabilize occupancy and gain local reputation.',
+            effects: { cash: -55_000, occupancyDelta: 0.01, noiDelta: 12_000, setFlag: 'weather-managed-well' },
+          },
+          {
+            weight: 0.3,
+            result: 'Repairs run longer than expected, but outcomes remain contained.',
+            effects: { cash: -70_000, occupancyDelta: -0.01 },
+          },
+        ],
+      },
+      {
+        id: 'minimal-response',
+        label: 'Do the minimum and wait for insurance timelines',
+        detail: 'Protects short-term cash, risks prolonged disruption.',
+        tone: 'bad',
+        effects: { occupancyDelta: -0.05, noiDelta: -28_000, setFlag: 'weather-mismanaged' },
+        result: 'Service disruption drags into next quarter and residents lose confidence.',
+      },
+    ],
+  },
+  {
+    id: 'geopolitical-oil-shock', deck: 'market', speaker: 'Macro briefing',
+    title: 'Geopolitical shock moves energy and credit markets',
+    prompt: 'Oil spikes and risk premiums widen after a global conflict escalation. Buyers and lenders reprice quickly.',
+    options: [
+      {
+        id: 'defensive-plan',
+        label: 'Shift to defensive operations and preserve liquidity',
+        detail: 'Cut discretionary spend, protect collections, shore up reserves.',
+        tone: 'good',
+        effects: { cash: 25_000, noiDelta: -8_000, setFlag: 'macro-defensive' },
+        result: 'You give up some upside but protect downside through uncertainty.',
+      },
+      {
+        id: 'stay-aggressive',
+        label: 'Stay aggressive and chase growth through turbulence',
+        detail: 'Higher upside if turbulence fades quickly.',
+        tone: 'warn',
+        branches: [
+          {
+            weight: 0.4,
+            result: 'The shock fades faster than expected and demand stays resilient.',
+            effects: { noiDelta: 22_000 },
+          },
+          {
+            weight: 0.6,
+            result: 'Credit tightens deeper than expected and your plan outruns reality.',
+            effects: { noiDelta: -35_000, occupancyDelta: -0.03, setFlag: 'macro-hit' },
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'market-move-whipsaw', deck: 'market', speaker: 'Disposition broker',
+    title: 'Market whipsaw before your expected exit window',
+    prompt: 'Bid depth moved sharply this quarter. You can lock certainty now or hold for potential reversal.',
+    options: [
+      {
+        id: 'de-risk-now',
+        label: 'De-risk and lock certainty now',
+        detail: 'Reduces tail risk; may cap upside.',
+        tone: 'good',
+        effects: { performanceFactor: 0.99, setFlag: 'exit-now' },
+        result: 'You prioritize certainty and bring the asset to market immediately.',
+      },
+      {
+        id: 'hold-for-reversal',
+        label: 'Hold one more quarter for a potential rebound',
+        detail: 'Could improve pricing, could deteriorate further.',
+        tone: 'warn',
+        branches: [
+          {
+            weight: 0.5,
+            result: 'Liquidity improves and valuation firms back up.',
+            effects: { performanceFactor: 1.05, setFlag: 'exit-now' },
+          },
+          {
+            weight: 0.5,
+            result: 'Bid depth weakens further and your window deteriorates.',
+            effects: { performanceFactor: 0.93, setFlag: 'exit-now' },
+          },
+        ],
+      },
+    ],
+  },
 
   // ── Capital ──
   {

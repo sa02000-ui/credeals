@@ -20,14 +20,16 @@ export function EncounterModal({
 }) {
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4" onClick={onMinimize}>
-      <div className="flex max-h-[88vh] w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center gap-2 border-b border-slate-100 bg-slate-50 px-4 py-3">
+      <div className="relative flex max-h-[88vh] w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-violet-500 via-indigo-500 to-emerald-500" />
+        <div className="flex items-center gap-2 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-violet-50 px-4 py-3">
           <span className="text-2xl">{icon}</span>
           <div className="min-w-0">
             <div className="truncate text-base font-bold text-slate-900">{title}</div>
             {subtitle && <div className="truncate text-xs text-slate-500">{subtitle}</div>}
           </div>
-          <button onClick={onMinimize} className="ml-auto rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:bg-slate-100" title="Minimize — the decision stays pending">
+          <span className="ml-auto rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-700">live event</span>
+          <button onClick={onMinimize} className="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:bg-slate-100" title="Minimize — the decision stays pending">
             ▁ minimize
           </button>
         </div>

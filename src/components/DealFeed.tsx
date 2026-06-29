@@ -183,7 +183,7 @@ function DealRow({
           {showFlow && daysLeft != null && (
             <span
               title="Days before this deal trades away if you don't pursue it"
-              className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold ${daysLeft <= 4 ? 'border-red-200 bg-red-50 text-red-700' : daysLeft <= 9 ? 'border-amber-200 bg-amber-50 text-amber-700' : 'border-slate-200 bg-slate-50 text-slate-500'}`}
+              className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold ${daysLeft <= 2 ? 'animate-pulse border-red-300 bg-red-100 text-red-700' : daysLeft <= 4 ? 'border-red-200 bg-red-50 text-red-700' : daysLeft <= 9 ? 'border-amber-200 bg-amber-50 text-amber-700' : 'border-slate-200 bg-slate-50 text-slate-500'}`}
             >
               ⏳ {Math.max(0, daysLeft)}d left
             </span>

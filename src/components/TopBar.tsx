@@ -9,11 +9,32 @@ import { RelationshipLedger } from '@/components/RelationshipLedger';
 import { NotificationInbox } from '@/components/NotificationInbox';
 
 export function TopBar() {
-  const { mode, setMode, cashBalance, day, resetAll, isAdmin, difficulty, clockPaused, setClockPaused, clockMinutesPerDay, setClockSpeed, treasury, gameEnabled, gold } = useApp();
+  const {
+    mode,
+    setMode,
+    cashBalance,
+    day,
+    resetAll,
+    isAdmin,
+    difficulty,
+    clockPaused,
+    setClockPaused,
+    clockMinutesPerDay,
+    setClockSpeed,
+    treasury,
+    gameEnabled,
+    gold,
+    dealDNA,
+    lastActionDay,
+    dealsIncoming,
+  } = useApp();
   const showGameUi = gameEnabled || isAdmin;
   const low = cashBalance < 25_000;
   const [showLedger, setShowLedger] = useState(false);
   const carryingCost = treasuryBalance(treasury) - cashBalance; // accumulated daily carrying costs
+  const idleDays = Math.max(0, day - lastActionDay);
+  const won = Object.values(dealDNA).filter((d) => d.terminalOutcome === 'won').length;
+  const hasFirstWin = won > 0;
 
   return (
     <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/90 backdrop-blur">
@@ -101,6 +122,39 @@ export function TopBar() {
                 <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500">🪙 Gold</div>
                 <div className="text-lg font-extrabold leading-none tabular-nums text-amber-600">{gold}</div>
               </div>
+              <div
+                className={`hidden flex-col justify-center rounded-xl border-2 px-3 py-1.5 text-right lg:flex ${
+                  idleDays >= 6
+                    ? 'border-red-300 bg-red-50'
+                    : dealsIncoming > 0
+                      ? 'border-indigo-300 bg-indigo-50'
+                      : 'border-slate-300 bg-slate-50'
+                }`}
+                title="Momentum signal: stay active to keep broker flow and opportunities warm."
+              >
+                <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500">⚡ Momentum</div>
+                <div
+                  className={`text-sm font-extrabold leading-none ${
+                    idleDays >= 6
+                      ? 'text-red-600'
+                      : dealsIncoming > 0
+                        ? 'text-indigo-700'
+                        : 'text-slate-700'
+                  }`}
+                >
+                  {idleDays >= 6
+                    ? `${idleDays}d idle`
+                    : dealsIncoming > 0
+                      ? `${dealsIncoming} incoming`
+                      : 'steady'}
+                </div>
+              </div>
+              {!hasFirstWin && (
+                <div className="hidden flex-col justify-center rounded-xl border-2 border-emerald-300 bg-emerald-50 px-3 py-1.5 text-right lg:flex">
+                  <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500">🏁 Run quest</div>
+                  <div className="text-sm font-extrabold leading-none text-emerald-700">First Won exit</div>
+                </div>
+              )}
             </div>
           )}
 

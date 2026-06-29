@@ -179,6 +179,9 @@ describe('scenario decks are structurally sound', () => {
   it('LOI deck is valid', () => {
     buildLOIScenarios(ctx).forEach(assertValid);
   });
+  it('LOI deck includes multiple decision beats', () => {
+    expect(buildLOIScenarios(ctx).length).toBeGreaterThanOrEqual(3);
+  });
   it('C2C deck is valid', () => {
     buildC2CScenarios({ ...ctx, missedPSATraps: 2 }).forEach(assertValid);
   });
@@ -205,7 +208,17 @@ describe('content additions (audit gaps)', () => {
     }
   });
   it('includes the added AM cards with well-formed options', () => {
-    const added = ['tenant-dispute', 'lease-renewal-season', 'renovation-delay', 'loan-maturity-wall', 'broker-repair-mission', 'marketed-sale-process'];
+    const added = [
+      'tenant-dispute',
+      'lease-renewal-season',
+      'renovation-delay',
+      'loan-maturity-wall',
+      'broker-repair-mission',
+      'marketed-sale-process',
+      'weather-event-response',
+      'geopolitical-oil-shock',
+      'market-move-whipsaw',
+    ];
     for (const id of added) {
       const card = AM_CARDS.find((c) => c.id === id);
       expect(card, `missing AM card ${id}`).toBeTruthy();

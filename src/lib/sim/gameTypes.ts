@@ -81,7 +81,17 @@ export interface DealDNA {
   exitDay?: number;
   projectedIRR?: number;
   actualIRR?: number;
+  terminalOutcome?: ExitOutcomeClass;
+  exitShock?: ExitShockType;
+  exitShockDirection?: 'positive' | 'negative';
+  exitShockImpactPct?: number;
+  propertyScore?: number;
+  areaScore?: number;
 }
+
+export type ExitOutcomeClass = 'won' | 'pyrrhic' | 'lost' | 'blown-up';
+export type VariabilityMode = 'deterministic' | 'stochastic';
+export type ExitShockType = 'market-move' | 'weather-event' | 'geopolitical-shock' | 'interest-rate-shock';
 
 // ── Asset management ──
 export type AMCardDeck = 'operations' | 'market' | 'capital' | 'relationship' | 'disposition';

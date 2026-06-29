@@ -40,6 +40,10 @@ export function DealDNAPanel({ deal }: { deal: MarketDeal }) {
     if (dna.closingScore > 0) rows.push({ label: 'Closing score', value: `${Math.round(dna.closingScore)}/100`, tone: dna.closingScore >= 80 ? 'good' : 'warn' });
     if (dna.projectedIRR != null) rows.push({ label: 'Projected IRR', value: pct(dna.projectedIRR) });
     if (dna.actualIRR != null) rows.push({ label: 'Actual IRR (at exit)', value: pct(dna.actualIRR), tone: (dna.actualIRR ?? 0) >= (dna.projectedIRR ?? 0) ? 'good' : 'bad' });
+    if (dna.terminalOutcome) rows.push({ label: 'Terminal outcome', value: dna.terminalOutcome });
+    if (dna.exitShock) rows.push({ label: 'Exit shock', value: `${dna.exitShock}${dna.exitShockDirection ? ` (${dna.exitShockDirection})` : ''}` });
+    if (dna.propertyScore != null) rows.push({ label: 'Property score', value: `${Math.round(dna.propertyScore)}/100` });
+    if (dna.areaScore != null) rows.push({ label: 'Area score', value: `${Math.round(dna.areaScore)}/100` });
   }
 
   const toneClass = (t?: string) => (t === 'good' ? 'text-emerald-600' : t === 'warn' ? 'text-amber-600' : t === 'bad' ? 'text-red-600' : 'text-slate-700');

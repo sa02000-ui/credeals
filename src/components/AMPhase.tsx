@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useApp } from '@/lib/store';
 import { useDealLocal } from '@/lib/hooks/useDealLocal';
 import { CalibrationReview } from '@/components/CalibrationReview';
-import { computeExitOutcome, defaultDetailedInputs, drawAMCards, usd, type AMCard, type AMEffect, type AMOption, type DetailedUWInputs, type MarketDeal } from '@/lib/sim';
+import { AM_CARDS, computeExitOutcome, dealExitBuyer, defaultDetailedInputs, deriveSeed, drawAMCards, evaluateExitOutcome, seededRng, usd, type AMCard, type AMEffect, type AMOption, type DetailedUWInputs, type MarketDeal, type VariabilityMode } from '@/lib/sim';
 
 /** E-AM — the quarterly Asset Management card phase (design doc Part 3). Game mode. */
 export function AMPhase({ deal }: { deal: MarketDeal }) {
@@ -45,12 +45,38 @@ function AMQuarter({ deal, am, est, dna, weakSpots, seed, applyAMEffect, advance
 }) {
   const { game, finalizeExit } = useApp();
   const [scenarios] = useDealLocal<{ inputs: DetailedUWInputs }[]>('uw-scenarios-v2', deal.id, [{ inputs: defaultDetailedInputs(deal) }]);
+  const [variabilityMode] = useDealLocal<VariabilityMode>('exit-variability-mode', deal.id, 'deterministic');
+  const exitBuyer = useMemo(
+    () => dealExitBuyer(deal.id, seed?.value ?? 0),
+    [deal.id, seed?.value],
+  );
 
   function doExit() {
-    if (!confirm('Exit (sell) this asset now? This ends the hold and scores the deal.')) return;
+    if (
+      !confirm(
+        `Exit (sell) this asset now? Buyer: ${exitBuyer.name}. This ends the hold and scores the deal.`,
+      )
+    )
+      return;
     const inputs = scenarios[0]?.inputs ?? defaultDetailedInputs(deal);
     const outcome = computeExitOutcome(inputs, am.noiCurrent, game.market);
-    finalizeExit(deal.id, outcome.projectedIRR, outcome.actualIRR);
+    const evaluated = evaluateExitOutcome({
+      deal,
+      market: game.market,
+      projectedIRR: outcome.projectedIRR,
+      actualIRR: outcome.actualIRR,
+      seed: seed?.value ?? 1,
+      holdQuarter: am.quarter,
+      variabilityMode,
+    });
+    finalizeExit(deal.id, evaluated.projectedIRR, evaluated.adjustedActualIRR, {
+      terminalOutcome: evaluated.terminal,
+      exitShock: evaluated.shock?.type,
+      exitShockDirection: evaluated.shock?.direction,
+      exitShockImpactPct: evaluated.shock?.impactPct,
+      propertyScore: evaluated.risk.propertyScore,
+      areaScore: evaluated.risk.areaScore,
+    });
     setStatus(deal.id, 'archived');
   }
 
@@ -58,7 +84,17 @@ function AMQuarter({ deal, am, est, dna, weakSpots, seed, applyAMEffect, advance
   const cards = useMemo(() => {
     if (!seed) return [];
     const firedIds = am.decisions.filter((d) => d.quarter < am.quarter).map((d) => d.cardId);
-    return drawAMCards({ quarter: am.quarter, seed, dna, firedIds, weakSpots, count: am.quarter === 1 ? 1 : 2 });
+    const countRng = seededRng(deriveSeed(seed.value, deal.id, am.quarter, 'am-card-count'));
+    const base = am.quarter === 1 ? 1 : 2;
+    const extra = am.quarter >= 3 && countRng() > 0.6 ? 1 : 0;
+    return drawAMCards({
+      quarter: am.quarter,
+      seed,
+      dna,
+      firedIds,
+      weakSpots,
+      count: Math.min(4, base + extra),
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [am.quarter, seed?.value]);
 
@@ -70,6 +106,32 @@ function AMQuarter({ deal, am, est, dna, weakSpots, seed, applyAMEffect, advance
 
   const projectedNOI = est.noi;
   const noiDelta = am.noiCurrent - projectedNOI;
+  const riskRadar = useMemo(() => {
+    if (!seed) return null;
+    const nextQuarter = am.quarter + 1;
+    const idx = seed.curveballQuarters.indexOf(nextQuarter);
+    if (idx < 0) return null;
+    const cardId = seed.curveballDeck[idx];
+    const card = AM_CARDS.find((c) => c.id === cardId);
+    return {
+      nextQuarter,
+      cardId,
+      deck: card?.deck ?? 'market',
+      title: card?.title ?? 'Emerging risk event',
+    };
+  }, [seed, am.quarter]);
+  const stressIndex = Math.max(
+    0,
+    Math.min(
+      100,
+      Math.round(
+        (game.market === 'tough' ? 42 : game.market === 'balanced' ? 28 : 18) +
+          (am.activeFlags.length * 8) +
+          (am.occupancy < 0.88 ? 16 : 0) +
+          (noiDelta < 0 ? 12 : 0),
+      ),
+    ),
+  );
 
   return (
     <div className="rounded-xl border-2 border-teal-300 bg-teal-50/30">
@@ -84,12 +146,26 @@ function AMQuarter({ deal, am, est, dna, weakSpots, seed, applyAMEffect, advance
         <Stat label="vs. proforma" value={`${noiDelta >= 0 ? '+' : ''}${usd(noiDelta, { compact: true })}`} tone={noiDelta >= 0 ? 'good' : 'bad'} />
         <Stat label="Last distribution" value={am.cashFlowHistory.length ? usd(am.cashFlowHistory[am.cashFlowHistory.length - 1].amount, { compact: true }) : '—'} />
       </div>
+      <div className="mx-3 rounded-lg border border-indigo-200 bg-indigo-50/60 px-3 py-2">
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <span className="font-semibold text-indigo-700">Risk radar</span>
+          <span className="text-slate-600">Stress index:</span>
+          <span className={`rounded px-1.5 py-0.5 font-semibold ${stressIndex >= 70 ? 'bg-red-100 text-red-700' : stressIndex >= 45 ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>{stressIndex}/100</span>
+          {riskRadar ? (
+            <span className="text-slate-600">
+              Next-quarter uncertainty signal: <b className="text-indigo-800">{riskRadar.deck}</b> event likely (Q{riskRadar.nextQuarter}).
+            </span>
+          ) : (
+            <span className="text-slate-500">No flagged curveball next quarter — but market volatility can still create surprises.</span>
+          )}
+        </div>
+      </div>
 
       {/* this quarter's cards */}
       <div className="space-y-3 p-3">
         {cards.length === 0 && <p className="text-sm text-slate-500">A quiet quarter — no events. Collect your distribution and move on.</p>}
         {cards.map((card) => (
-          <AMCardRunner key={card.id} card={card} resolved={resolvedThisQ.has(card.id)} dealId={deal.id} quarter={am.quarter} applyAMEffect={applyAMEffect} />
+          <AMCardRunner key={card.id} card={card} resolved={resolvedThisQ.has(card.id)} dealId={deal.id} quarter={am.quarter} runSeed={seed?.value ?? 1} applyAMEffect={applyAMEffect} />
         ))}
       </div>
 
@@ -114,7 +190,11 @@ function AMQuarter({ deal, am, est, dna, weakSpots, seed, applyAMEffect, advance
 
       {/* exit */}
       <div className={`flex items-center justify-between gap-2 border-t border-teal-200 px-3 py-2 ${exitFlag ? 'bg-amber-50' : ''}`}>
-        <span className="text-xs text-slate-600">{exitFlag ? '📨 You have an offer on the table — sell now?' : `Hold and operate, or exit when the numbers are right (Q${am.quarter}, NOI ${usd(am.noiCurrent, { compact: true })}).`}</span>
+        <span className="text-xs text-slate-600">
+          {exitFlag
+            ? `📨 ${exitBuyer.name} has an offer on the table — sell now?`
+            : `Hold and operate, or exit when the numbers are right (Q${am.quarter}, NOI ${usd(am.noiCurrent, { compact: true })}). Exit buyer profile: ${exitBuyer.name}.`}
+        </span>
         <button
           onClick={doExit}
           className={`rounded-lg px-4 py-1.5 text-sm font-semibold ${exitFlag ? 'bg-amber-500 text-white hover:bg-amber-600' : 'border border-slate-300 text-slate-700 hover:bg-slate-100'}`}
@@ -126,11 +206,12 @@ function AMQuarter({ deal, am, est, dna, weakSpots, seed, applyAMEffect, advance
   );
 }
 
-function AMCardRunner({ card, resolved, dealId, quarter, applyAMEffect }: {
+function AMCardRunner({ card, resolved, dealId, quarter, runSeed, applyAMEffect }: {
   card: AMCard;
   resolved: boolean;
   dealId: string;
   quarter: number;
+  runSeed: number;
   applyAMEffect: ReturnType<typeof useApp>['applyAMEffect'];
 }) {
   const [result, setResult] = useState<string | null>(resolved ? '(resolved)' : null);
@@ -140,7 +221,8 @@ function AMCardRunner({ card, resolved, dealId, quarter, applyAMEffect }: {
     let text = opt.result ?? 'Done.';
     if (opt.branches && opt.branches.length) {
       const total = opt.branches.reduce((a, b) => a + b.weight, 0);
-      let r = Math.random() * total;
+      const rng = seededRng(deriveSeed(runSeed, dealId, quarter, card.id, opt.id));
+      let r = rng() * total;
       let chosen = opt.branches[0];
       for (const b of opt.branches) { r -= b.weight; if (r <= 0) { chosen = b; break; } }
       eff = { ...eff, ...chosen.effects };
