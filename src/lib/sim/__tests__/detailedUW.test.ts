@@ -34,6 +34,7 @@ describe('lineAmount', () => {
     const ctx = { units: 100, price: 1_000_000, loan: 650_000, egi: 500_000 };
     expect(lineAmount({ id: 'a', label: '', amount: 50, basis: 'perUnit' }, ctx)).toBe(5_000);
     expect(lineAmount({ id: 'b', label: '', amount: 1_234, basis: 'total' }, ctx)).toBe(1_234);
+    expect(lineAmount({ id: 'm', label: '', amount: 500, basis: 'perMonth' }, ctx)).toBe(6_000); // $/mo × 12, unit-independent
     expect(lineAmount({ id: 'c', label: '', amount: 0.02, basis: 'pctPrice' }, ctx)).toBe(20_000);
     expect(lineAmount({ id: 'd', label: '', amount: 0.01, basis: 'pctLoan' }, ctx)).toBe(6_500);
     expect(lineAmount({ id: 'e', label: '', amount: 0.03, basis: 'pctEGI' }, ctx)).toBe(15_000);

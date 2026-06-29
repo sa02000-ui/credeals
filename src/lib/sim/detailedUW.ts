@@ -18,7 +18,7 @@
 
 import { pmt } from './napkin';
 
-export type LineBasis = 'total' | 'perUnit' | 'pctPrice' | 'pctLoan' | 'pctEGI' | 'millage';
+export type LineBasis = 'total' | 'perUnit' | 'perMonth' | 'pctPrice' | 'pctLoan' | 'pctEGI' | 'millage';
 
 export interface LineItem {
   id: string;
@@ -42,6 +42,8 @@ export function lineAmount(it: LineItem, ctx: LineCtx): number {
   switch (it.basis) {
     case 'perUnit':
       return it.amount * ctx.units;
+    case 'perMonth':
+      return it.amount * 12; // a flat monthly $ cost, annualized (independent of unit count)
     case 'pctPrice':
       return it.amount * ctx.price;
     case 'pctLoan':
@@ -63,6 +65,7 @@ function sumLines(items: LineItem[], ctx: LineCtx): number {
 export const BASIS_LABEL: Record<LineBasis, string> = {
   total: '$ total',
   perUnit: '$ / unit',
+  perMonth: '$ / month',
   pctPrice: '% of price',
   pctLoan: '% of loan',
   pctEGI: '% of EGI',

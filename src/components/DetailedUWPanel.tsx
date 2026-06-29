@@ -405,7 +405,7 @@ export function DetailedUWPanel({ deal }: { deal: MarketDeal }) {
             Edit the $ below to set that year directly (amber) — the % then shows the <i>implied</i> growth, so what you see is always accurate.
           </p>
           <div className="overflow-x-auto">
-            <table className="w-full text-xs" style={{ minWidth: 220 + 90 + r.hold * 88 }}>
+            <table className="w-full text-sm" style={{ minWidth: 280 + 110 + r.hold * 116 }}>
               <thead>
                 <tr className="text-slate-500">
                   <th className="py-1 text-left font-medium">Line</th>
@@ -415,15 +415,15 @@ export function DetailedUWPanel({ deal }: { deal: MarketDeal }) {
               </thead>
               <tbody className="tabular-nums">
                 <BandRow label={`Income · growth ${(inp.otherIncomeGrowthPct * 100).toFixed(1)}%/yr`} color="bg-emerald-50 text-emerald-700" cols={r.hold + 2} />
-                <StmtRow label="Gross potential rent" cells={r.years.map((y) => usd(y.gpr, { compact: true }))} />
+                <StmtRow label="Gross potential rent" cells={r.years.map((y) => usd(y.gpr))} />
                 {inp.otherIncome.map((it) => (
                   <StmtLineRow key={it.id} label={it.label} values={r.incomeDetail[it.id] ?? []} lineId={it.id}
                     t12={inp.t12Ref?.[it.id]} onSetT12={setT12}
                     isOverridden={isOverridden} onSet={setYearOverride} onClear={clearYearOverride}
                     isGrowthOverridden={isGrowthOverridden} onSetGrowth={setGrowthOverride} onClearGrowth={clearGrowthOverride} />
                 ))}
-                <StmtRow label={`Vacancy loss (${(inp.vacancy * 100).toFixed(1)}%)`} muted cells={r.years.map((y) => `(${usd((y.gpr + y.otherIncome) * inp.vacancy, { compact: true })})`)} />
-                <StmtRow label="Effective gross income" bold cells={r.years.map((y) => usd(y.egi, { compact: true }))} />
+                <StmtRow label={`Vacancy loss (${(inp.vacancy * 100).toFixed(1)}%)`} muted cells={r.years.map((y) => `(${usd((y.gpr + y.otherIncome) * inp.vacancy)})`)} />
+                <StmtRow label="Effective gross income" bold cells={r.years.map((y) => usd(y.egi))} />
 
                 <BandRow label={`Operating expenses · growth ${(inp.expenseGrowthPct * 100).toFixed(1)}%/yr`} color="bg-amber-50 text-amber-700" cols={r.hold + 2} />
                 {inp.expenses.map((it) => (
@@ -432,29 +432,29 @@ export function DetailedUWPanel({ deal }: { deal: MarketDeal }) {
                     isOverridden={isOverridden} onSet={setYearOverride} onClear={clearYearOverride}
                     isGrowthOverridden={isGrowthOverridden} onSetGrowth={setGrowthOverride} onClearGrowth={clearGrowthOverride} />
                 ))}
-                <StmtRow label="Total operating expenses" bold cells={r.years.map((y) => usd(y.opex, { compact: true }))} />
-                <StmtRow label="NET OPERATING INCOME" strong cells={r.years.map((y) => usd(y.noi, { compact: true }))} />
+                <StmtRow label="Total operating expenses" bold cells={r.years.map((y) => usd(y.opex))} />
+                <StmtRow label="NET OPERATING INCOME" strong cells={r.years.map((y) => usd(y.noi))} />
 
                 <BandRow label="Debt service" color="bg-sky-50 text-sky-700" cols={r.hold + 2} />
-                <StmtRow label="1st lien (senior)" muted cells={r.years.map((y) => usd(y.dsSenior, { compact: true }))} />
-                {showSupp && <StmtRow label="Supplemental" muted cells={r.years.map((y) => usd(y.dsSupp, { compact: true }))} />}
-                {showSeller && <StmtRow label="Seller note" muted cells={r.years.map((y) => usd(y.dsSeller, { compact: true }))} />}
-                {showRefi && <StmtRow label="Refi loan" muted cells={r.years.map((y) => usd(y.dsRefi, { compact: true }))} />}
-                <StmtRow label="Total debt service" bold cells={r.years.map((y) => usd(y.debtService, { compact: true }))} />
+                <StmtRow label="1st lien (senior)" muted cells={r.years.map((y) => usd(y.dsSenior))} />
+                {showSupp && <StmtRow label="Supplemental" muted cells={r.years.map((y) => usd(y.dsSupp))} />}
+                {showSeller && <StmtRow label="Seller note" muted cells={r.years.map((y) => usd(y.dsSeller))} />}
+                {showRefi && <StmtRow label="Refi loan" muted cells={r.years.map((y) => usd(y.dsRefi))} />}
+                <StmtRow label="Total debt service" bold cells={r.years.map((y) => usd(y.debtService))} />
                 <StmtRow label="DSCR" muted cells={r.years.map((y) => y.dscr.toFixed(2))} />
-                <StmtRow label="CASH FLOW AFTER DEBT" strong cells={r.years.map((y) => usd(y.cashFlow, { compact: true }))} />
+                <StmtRow label="CASH FLOW AFTER DEBT" strong cells={r.years.map((y) => usd(y.cashFlow))} />
 
                 <BandRow label="Capital events" color="bg-indigo-50 text-indigo-700" cols={r.hold + 2} />
-                <StmtRow label="Refi / supplemental proceeds" muted cells={r.years.map((y) => (y.financingProceeds ? usd(y.financingProceeds, { compact: true }) : '—'))} />
-                <StmtRow label="Net sale proceeds (exit)" muted cells={r.years.map((y) => (y.year === r.hold ? usd(r.netSaleProceeds, { compact: true }) : '—'))} />
+                <StmtRow label="Refi / supplemental proceeds" muted cells={r.years.map((y) => (y.financingProceeds ? usd(y.financingProceeds) : '—'))} />
+                <StmtRow label="Net sale proceeds (exit)" muted cells={r.years.map((y) => (y.year === r.hold ? usd(r.netSaleProceeds) : '—'))} />
 
                 <BandRow label="Distributions" color="bg-violet-50 text-violet-700" cols={r.hold + 2} />
-                {inp.prefEquityEnabled && <StmtRow label="Preferred equity (current + accrued payoff)" cells={r.waterfall.map((w) => usd(w.pref, { compact: true }))} />}
-                <StmtRow label="LP distributions" bold cells={r.waterfall.map((w) => usd(w.lp, { compact: true }))} />
-                <StmtRow label="GP distributions (co-invest + promote)" cells={r.waterfall.map((w) => usd(w.gp, { compact: true }))} />
-                <StmtRow label="…of which GP promote (carry)" muted cells={r.waterfall.map((w) => usd(w.gpPromote ?? 0, { compact: true }))} />
-                {inp.prefEquityEnabled && <StmtRow label="Pref-equity accrued, carried fwd" muted cells={r.waterfall.map((w) => usd(w.prefAccruedEnd ?? 0, { compact: true }))} />}
-                <StmtRow label="LP pref accrued, carried fwd" muted cells={r.waterfall.map((w) => usd(w.commonPrefAccruedEnd ?? 0, { compact: true }))} />
+                {inp.prefEquityEnabled && <StmtRow label="Preferred equity (current + accrued payoff)" cells={r.waterfall.map((w) => usd(w.pref))} />}
+                <StmtRow label="LP distributions" bold cells={r.waterfall.map((w) => usd(w.lp))} />
+                <StmtRow label="GP distributions (co-invest + promote)" cells={r.waterfall.map((w) => usd(w.gp))} />
+                <StmtRow label="…of which GP promote (carry)" muted cells={r.waterfall.map((w) => usd(w.gpPromote ?? 0))} />
+                {inp.prefEquityEnabled && <StmtRow label="Pref-equity accrued, carried fwd" muted cells={r.waterfall.map((w) => usd(w.prefAccruedEnd ?? 0))} />}
+                <StmtRow label="LP pref accrued, carried fwd" muted cells={r.waterfall.map((w) => usd(w.commonPrefAccruedEnd ?? 0))} />
               </tbody>
             </table>
           </div>
@@ -917,11 +917,11 @@ function StmtLineRow({
                 </span>
               )}
               <span className="inline-flex items-center">
-                <input
-                  type="number"
+                <MoneyInput
                   value={Math.round(v)}
-                  onChange={(e) => onSet(lineId, year, Number(e.target.value))}
-                  className={`w-20 rounded border py-0.5 pl-1 pr-1 text-right text-xs tabular-nums focus:outline-none ${cashOver ? 'border-amber-400 bg-amber-50 font-semibold text-amber-800' : 'border-slate-200 text-slate-600'}`}
+                  onChange={(n) => onSet(lineId, year, n)}
+                  ariaLabel={`${label} year ${year}`}
+                  className={`w-24 rounded border py-0.5 pl-1 pr-1 text-right text-sm tabular-nums focus:outline-none ${cashOver ? 'border-amber-400 bg-amber-50 font-semibold text-amber-800' : 'border-slate-200 text-slate-600'}`}
                 />
                 {cashOver && <button onClick={() => onClear(lineId, year)} className="ml-0.5 text-[10px] text-amber-500 hover:text-red-500" title="Revert to calculated">✕</button>}
               </span>
