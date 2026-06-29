@@ -5,8 +5,10 @@ export function usd(n: number, opts: { compact?: boolean; decimals?: boolean } =
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'USD',
-    // compact + decimals → e.g. $24.5M / $24.55M / $25M (trailing zeros dropped)
-    maximumFractionDigits: opts.compact && opts.decimals ? 2 : 0,
+    // Compact always carries up to 2 decimals so large figures read precisely — $23.5M / $24.55M /
+    // $25M (trailing zeros dropped). Standard (full) stays whole-dollar with commas. (`decimals` is
+    // accepted for back-compat but no longer needed.)
+    maximumFractionDigits: opts.compact ? 2 : 0,
     notation: opts.compact ? 'compact' : 'standard',
   }).format(n);
 }
