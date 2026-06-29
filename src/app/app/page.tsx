@@ -61,12 +61,12 @@ export default function Home() {
       )}
 
       {mode === 'game' && buyBoxApproved && (
-        <div className="mx-auto w-full max-w-7xl px-4 pt-4">
+        <div className="mx-auto w-full max-w-[1600px] px-4 pt-4">
           <CareerHud />
         </div>
       )}
 
-      <main className={`mx-auto grid w-full max-w-7xl flex-1 gap-4 px-4 py-4 ${hideSidebar ? 'lg:grid-cols-[44px_minmax(0,1fr)]' : 'lg:grid-cols-[340px_minmax(0,1fr)]'}`}>
+      <main className={`mx-auto grid w-full max-w-[1600px] flex-1 gap-4 px-4 py-4 ${hideSidebar ? 'lg:grid-cols-[44px_minmax(0,1fr)]' : 'lg:grid-cols-[340px_minmax(0,1fr)]'}`}>
         {hideSidebar ? (
           /* Minimized rail — Detailed UW gets the room, one click expands the sidebar back */
           <button
@@ -161,7 +161,7 @@ function LifecycleNav({
 }) {
   return (
     <nav className="border-b border-indigo-800 bg-gradient-to-r from-indigo-700 to-indigo-600">
-      <div className="mx-auto flex max-w-7xl items-center gap-1 overflow-x-auto px-4 py-3 text-base text-white">
+      <div className="mx-auto flex max-w-[1600px] items-center gap-1 overflow-x-auto px-4 py-3 text-base text-white">
         {LIFECYCLE.map((step, i) => {
           const active = i === current;
           const done = i < current;

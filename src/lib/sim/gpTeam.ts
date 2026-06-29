@@ -149,7 +149,8 @@ export const DOLLAR_BUCKETS = ['risk', 'fundmgr'];
  *  field is "linked" (shows the live UW number); a defined field is a manual override (link broken). */
 export interface GPKeyNumbers {
   dealSize?: number;
-  gpProfit?: number; // total GP profit to split (the pool)
+  equityRequired?: number; // total equity to raise/bring
+  gpProfit?: number; // total GP profit to split (the pool), excluding fees
   acqFee?: number; // acquisition fee at closing
   amFees?: number; // asset-management fees over the life of the deal
 }
@@ -200,6 +201,12 @@ export interface MemberResult {
   dealShare: number;
   /** totalGPProfit × gpShare ($) */
   profit: number;
+  /** this member's % of the Asset-Management column (drives AM-fee allocation) */
+  amBucketPct: number;
+  /** AM-weighted share = amBucketPct × AM weight (the part of gpShare that comes from AM) */
+  amShare: number;
+  /** non-AM share = gpShare − amShare (drives the at-closing acquisition fee) */
+  nonAMShare: number;
 }
 
 export interface GPTeamResult {
@@ -219,11 +226,15 @@ export function runGPTeam(s: GPTeamState): GPTeamResult {
   }
   const weightSum = GP_BUCKETS.reduce((sum, b) => sum + (s.weights[b.id] ?? 0), 0);
 
+  const amWeight = s.weights['am'] ?? 0;
   const members: MemberResult[] = s.members.map((member) => {
     const gpShare = GP_BUCKETS.reduce((sum, b) => sum + (member.alloc[b.id] ?? 0) * (s.weights[b.id] ?? 0), 0);
     const dealShare = s.gpPct * gpShare;
     const profit = s.totalGPProfit * gpShare;
-    return { member, gpShare, dealShare, profit };
+    const amBucketPct = member.alloc['am'] ?? 0;
+    const amShare = amBucketPct * amWeight;
+    const nonAMShare = gpShare - amShare;
+    return { member, gpShare, dealShare, profit, amBucketPct, amShare, nonAMShare };
   });
 
   const gpShareSum = members.reduce((sum, m) => sum + m.gpShare, 0);
