@@ -123,7 +123,7 @@ function extensionText(f: LOIForm): string {
   return `Seller shall grant Purchaser ${f.extensionCount} optional ${f.extensionDays}-day closing extension(s). For each extension, ${each[f.extensionMode]}.`;
 }
 
-function buildLoiDoc(deal: MarketDeal, f: LOIForm, logoDataUrl?: string): LoiDoc {
+function buildLoiDoc(deal: MarketDeal, f: LOIForm, logos?: string[]): LoiDoc {
   const today = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
   const emdPct = ((f.emdAmount / Math.max(1, f.purchasePrice)) * 100).toFixed(1);
   const propLine = `${deal.name}${deal.address ? ` — ${deal.address}` : ''}${deal.city ? `, ${deal.city}, ${deal.state}` : ''}${deal.unitCount ? ` (${deal.unitCount} units)` : ''}`;
@@ -164,7 +164,7 @@ function buildLoiDoc(deal: MarketDeal, f: LOIForm, logoDataUrl?: string): LoiDoc
   ];
 
   return {
-    logoDataUrl: logoDataUrl || undefined,
+    logos: logos && logos.length ? logos : undefined,
     dateLine: today,
     reLine: `Re: Letter of Intent — ${deal.name}${deal.city ? `, ${deal.city}, ${deal.state}` : ''}`,
     intro: `This non-binding Letter of Intent (the "LOI") sets out the principal terms under which ${f.entity} and/or its assigns ("Purchaser") proposes to acquire the property described below from its owner ("Seller"), to be memorialized in a definitive Purchase and Sale Agreement (the "PSA").`,
@@ -217,23 +217,30 @@ export function LOIPanel({ deal }: { deal: MarketDeal }) {
     setLoiRecord({ financing: f.financing, purchasePrice: f.purchasePrice });
   }, [f.financing, f.purchasePrice, setLoiRecord]);
 
-  const [logoDataUrl, setLogoDataUrl] = useDealLocal<string>('loi-logo', deal.id, '');
+  const [logos, setLogos] = useDealLocal<string[]>('loi-logos', deal.id, []);
   const [logoErr, setLogoErr] = useState('');
-  const doc = useMemo(() => buildLoiDoc(deal, f, logoDataUrl || undefined), [deal, f, logoDataUrl]);
+  const doc = useMemo(() => buildLoiDoc(deal, f, logos), [deal, f, logos]);
   const generated = useMemo(() => loiToText(doc), [doc]);
   const [edited, setEdited] = useState<string | null>(null);
   const text = edited ?? generated;
 
   function onLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
+    const picked = Array.from(e.target.files ?? []);
     e.target.value = '';
-    if (!file) return;
-    if (!file.type.startsWith('image/')) { setLogoErr('Please choose an image file (PNG or JPG).'); return; }
-    if (file.size > 1_500_000) { setLogoErr('Image is too large — use one under 1.5 MB.'); return; }
-    const reader = new FileReader();
-    reader.onload = () => { setLogoErr(''); setLogoDataUrl(typeof reader.result === 'string' ? reader.result : ''); };
-    reader.readAsDataURL(file);
+    if (picked.length === 0) return;
+    const valid = picked.filter((file) => {
+      if (!file.type.startsWith('image/')) { setLogoErr('Please choose image files (PNG or JPG).'); return false; }
+      if (file.size > 1_500_000) { setLogoErr('Each image must be under 1.5 MB.'); return false; }
+      return true;
+    });
+    if (valid.length) setLogoErr('');
+    valid.forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = () => setLogos((cur) => (typeof reader.result === 'string' ? [...cur, reader.result] : cur));
+      reader.readAsDataURL(file);
+    });
   }
+  const removeLogo = (idx: number) => setLogos((cur) => cur.filter((_, i) => i !== idx));
 
   const { mode, difficulty, game, applyGameOutcome, setStatus, statusOf, addFiles, filesOf, advanceDays, sessionSeed, updateRelationship, updateDealDNA } = useApp();
   const { broker, seller } = dealCounterparties(deal.id, sessionSeed?.value ?? 0);
@@ -313,23 +320,23 @@ export function LOIPanel({ deal }: { deal: MarketDeal }) {
 
       {/* Form */}
       <div className="border-b border-slate-100 p-4">
-        {/* Letterhead logo */}
-        <div className="mb-3 flex items-center gap-3 rounded-lg border border-dashed border-slate-300 p-3">
-          {logoDataUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={logoDataUrl} alt="LOI logo" className="h-12 max-w-[180px] object-contain" />
-          ) : (
-            <div className="grid h-12 w-12 place-items-center rounded bg-slate-100 text-lg text-slate-400">🖼️</div>
-          )}
-          <div className="min-w-0">
-            <div className="text-xs font-semibold text-slate-700">Letterhead logo <span className="font-normal text-slate-400">— shown at the top of the Word &amp; PDF</span></div>
-            <div className="mt-1 flex flex-wrap items-center gap-2">
-              <label className="cursor-pointer rounded-md border border-slate-300 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100">{logoDataUrl ? 'Replace image' : 'Upload image'}<input type="file" accept="image/*" className="hidden" onChange={onLogoUpload} /></label>
-              {logoDataUrl && <button onClick={() => { setLogoDataUrl(''); setLogoErr(''); }} className="text-xs text-slate-400 hover:text-red-500">remove</button>}
-              <span className="text-[10px] text-slate-400">PNG or JPG, under 1.5 MB</span>
-            </div>
-            {logoErr && <div className="mt-1 text-[11px] text-amber-600">{logoErr}</div>}
+        {/* Letterhead logos — one or more company logos, shown centered at the top of the LOI */}
+        <div className="mb-3 rounded-lg border border-dashed border-slate-300 p-3">
+          <div className="text-xs font-semibold text-slate-700">Letterhead logo(s) <span className="font-normal text-slate-400">— centered at the top of the Word &amp; PDF; add more than one for co-sponsors</span></div>
+          <div className="mt-2 flex flex-wrap items-center gap-3">
+            {logos.map((u, i) => (
+              <div key={i} className="relative rounded border border-slate-200 bg-white p-1">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={u} alt={`Logo ${i + 1}`} className="h-12 max-w-[160px] object-contain" />
+                <button onClick={() => removeLogo(i)} className="absolute -right-2 -top-2 grid h-5 w-5 place-items-center rounded-full bg-white text-xs text-slate-400 shadow ring-1 ring-slate-200 hover:text-red-500" title="Remove logo">✕</button>
+              </div>
+            ))}
+            <label className="grid h-14 cursor-pointer place-items-center rounded-md border border-dashed border-slate-300 px-3 text-xs font-medium text-slate-600 hover:bg-slate-100">
+              {logos.length ? '+ Add another' : '+ Upload logo(s)'}
+              <input type="file" accept="image/*" multiple className="hidden" onChange={onLogoUpload} />
+            </label>
           </div>
+          <div className="mt-1 text-[10px] text-slate-400">PNG or JPG, each under 1.5 MB.{logoErr && <span className="ml-2 text-amber-600">{logoErr}</span>}</div>
         </div>
 
         <h3 className="mb-2 text-sm font-semibold">Terms</h3>
