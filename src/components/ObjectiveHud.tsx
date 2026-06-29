@@ -51,7 +51,7 @@ function nextBeat(buyBoxApproved: boolean, status: DealStatus | null, hasSelecte
   switch (status) {
     case 'new':
     case 'napkin':
-      return { title: 'Run the napkin — is there meat on the bone?', cta: 'Open the workspace', target: 'workspace', why: 'A 5-minute valuation: income − expenses = NOI, ÷ cap rate = value vs. the ask. It tells you fast whether to dig deeper.' };
+      return { title: 'Run the Napkin — is there meat on the bone?', cta: 'Open the workspace', target: 'workspace', why: 'A 5-minute valuation: income − expenses = NOI, ÷ cap rate = value vs. the ask. It tells you fast whether to dig deeper.' };
     case 'detailed':
       return { title: 'Finish the detailed underwriting before you offer', cta: 'Open Detailed UW', target: 'workspace', why: 'Build the multi-year proforma, debt and equity stack, and investor returns. Know your numbers cold before you commit.' };
     case 'loi':

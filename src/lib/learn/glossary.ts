@@ -24,7 +24,7 @@ export const GLOSSARY: Record<string, LearnEntry> = {
   'step.pick': {
     title: 'Pick a Deal',
     what: 'Sourcing — reviewing the flow of available properties (from brokers, listing sites, off-market) and choosing which ones are worth underwriting. Most deals you see, you pass on.',
-    app: 'Deals outside your buy box are flagged. Click a deal to open its workspace and start the napkin underwriting.',
+    app: 'Deals outside your buy box are flagged. Click a deal to open its workspace and start the Napkin underwriting.',
   },
   'step.napkin': {
     title: 'Napkin Underwriting',

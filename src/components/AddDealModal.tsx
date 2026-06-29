@@ -130,7 +130,7 @@ export function AddDealModal({ onClose, onAdded }: { onClose: () => void; onAdde
         <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
           <div className="text-xs font-semibold text-slate-700">Financials (optional now, core of detailed UW later)</div>
           <p className="mb-2 text-[11px] text-slate-500">
-            Upload the T-12 and rent roll. We&apos;ll do the napkin first; detailed underwriting is created from these when you pass napkin.
+            Upload the T-12 and rent roll. We&apos;ll do the Napkin first; detailed underwriting is created from these when you pass Napkin.
           </p>
           <div className="grid grid-cols-2 gap-3">
             <UploadField label="T-12 (trailing 12 P&L)" file={t12} onPick={setT12} />

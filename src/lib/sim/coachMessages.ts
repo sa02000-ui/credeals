@@ -18,10 +18,10 @@ export interface CoachLine {
 export const COACH_MESSAGES: CoachLine[] = [
   { trigger: 'buybox-prompt', text: "Start with your buy box. It's not a cage — it's a filter that keeps you from chasing deals that don't fit. You can widen it later, but discipline early is what separates operators from tire-kickers." },
   { trigger: 'buybox-too-broad', text: "That's a wide net. What's the ONE thing that must be true for you to seriously look at a deal? Narrow to that and the noise disappears." },
-  { trigger: 'first-deal', text: "Pick a deal and run the napkin. Five minutes of math tells you whether it's worth a week of diligence. Most deals you'll pass on — that's the job." },
+  { trigger: 'first-deal', text: "Pick a deal and run the Napkin. Five minutes of math tells you whether it's worth a week of diligence. Most deals you'll pass on — that's the job." },
   { trigger: 'napkin-aggressive', text: "Your proforma rent is running well above in-place. That assumption is doing the heavy lifting in your returns. Is that rent achievable today, or is it aspirational? Underwrite to what's real and model the upside separately." },
   { trigger: 'napkin-conservative', text: "Conservative assumptions — I like it. You'll lose some competitive deals to aggressive buyers, but the ones you win will beat projections, and that's how you earn LP trust." },
-  { trigger: 'detailed-enter', text: "Now we go deep. The napkin tells you whether to keep looking; the detailed model tells you whether to buy. Tie every line to the actual T-12 and rent roll — this is where you find out if the OM was telling the truth." },
+  { trigger: 'detailed-enter', text: "Now we go deep. The Napkin tells you whether to keep looking; the detailed model tells you whether to buy. Tie every line to the actual T-12 and rent roll — this is where you find out if the OM was telling the truth." },
   { trigger: 'loi-submit', text: "The LOI is where terms become leverage. Price gets the headline, but earnest money, DD window, and a clean financing contingency are what actually win — or lose — you the deal." },
   { trigger: 'c2c-enter', text: "Under contract — the clock is real now. Lender, appraisal, insurance, the raise, and diligence all run at once. Protect your earnest money: keep it refundable until you've cleared your contingencies." },
   { trigger: 'am-enter', text: "You own it. The deal you underwrote only happens if you execute the business plan — occupancy, NOI, and distributions are the scoreboard now. Watch the cards each quarter and don't let small problems compound." },
@@ -57,7 +57,7 @@ export function answerCoachQuestion(question: string): string {
   const q = question.toLowerCase().trim();
   if (!q) return "Ask me anything — cap rates, DSCR, the waterfall, due diligence, how the LOI negotiation works…";
   if (/^(hi|hey|hello|yo|sup)\b/.test(q)) return "Hey. What are you working on? Ask me about any number, term, or step and I'll break it down.";
-  if (/help|what can you|how do i play|stuck/.test(q)) return "Tell me where you are — buy box, napkin, detailed UW, LOI, contract-to-close, or asset management — and I'll walk you through the next move. Or ask about any term (cap rate, DSCR, promote, retrade…).";
+  if (/help|what can you|how do i play|stuck/.test(q)) return "Tell me where you are — buy box, Napkin, detailed UW, LOI, contract-to-close, or asset management — and I'll walk you through the next move. Or ask about any term (cap rate, DSCR, promote, retrade…).";
 
   // score each glossary entry by keyword overlap with the question
   let best: { entry: LearnEntry; score: number } | null = null;

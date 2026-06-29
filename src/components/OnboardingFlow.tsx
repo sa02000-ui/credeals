@@ -118,7 +118,7 @@ export function OnboardingFlow() {
               <div className="mt-4 rounded-xl border border-slate-200 p-4">
                 <div className="text-sm font-bold text-slate-900">The journey ahead</div>
                 <p className="mt-1.5 text-[13px] leading-relaxed text-slate-700">
-                  You’ll <b>define your buy box</b> → <b>hunt for deals</b> → <b>underwrite</b> them (a quick napkin pass, then detailed) and decide whether to offer → <b>negotiate the LOI</b> (Letter of Intent) → <b>negotiate the PSA</b> (Purchase &amp; Sale Agreement) → work through <b>C2C</b> (Contract-to-Close) → <b>close</b> the deal → and <b>operate it (Asset Management)</b> all the way to exit.
+                  You’ll <b>define your buy box</b> → <b>hunt for deals</b> → <b>underwrite</b> them (a quick Napkin pass, then detailed) and decide whether to offer → <b>negotiate the LOI</b> (Letter of Intent) → <b>negotiate the PSA</b> (Purchase &amp; Sale Agreement) → work through <b>C2C</b> (Contract-to-Close) → <b>close</b> the deal → and <b>operate it (Asset Management)</b> all the way to exit.
                 </p>
               </div>
 

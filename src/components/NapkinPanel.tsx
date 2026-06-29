@@ -340,18 +340,18 @@ export function NapkinPanel({
       <div id="sec-decision" className="scroll-mt-36 p-4">
         <h3 className="mb-2 text-sm font-semibold">Decision</h3>
         <div className="flex flex-wrap gap-2">
-          <DecisionBtn active={false} tone="emerald" onClick={() => setStatus(deal.id, 'detailed')}>
-            Pass napkin → Detailed UW{mode === 'game' ? ' (−$7,500 costs)' : ''}
-          </DecisionBtn>
-          <DecisionBtn active={status === 'napkin'} tone="sky" onClick={() => setStatus(deal.id, 'napkin')}>
+          <DecisionBtn active={status === 'napkin' || status === 'new'} tone="sky" onClick={() => setStatus(deal.id, 'napkin')}>
             Keep underwriting
+          </DecisionBtn>
+          <DecisionBtn active={status === 'detailed'} tone="emerald" onClick={() => setStatus(deal.id, 'detailed')}>
+            Pass Napkin → Detailed UW{mode === 'game' ? ' (−$7,500 costs)' : ''}
           </DecisionBtn>
           <DecisionBtn active={status === 'archived'} tone="slate" onClick={() => setStatus(deal.id, 'archived')}>
             Archive
           </DecisionBtn>
         </div>
         <p className="mt-2 text-xs text-slate-500">
-          Passing napkin advances the deal to Detailed UW (T-12 + rent roll), then LOI → Contract-to-Close → Asset Management.
+          Passing Napkin advances the deal to Detailed UW (T-12 + rent roll), then LOI → Contract-to-Close → Asset Management.
         </p>
       </div>
     </section>
@@ -502,13 +502,13 @@ function SimpleResult({ r, ask, offer, capex, cap, affordableRent, marketRent }:
   const allIn = offer + capex;
   return (
     <div className={`rounded-lg border p-3 ${strong ? 'border-emerald-300 bg-emerald-50/60' : 'border-red-300 bg-red-50/60'}`}>
-      <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-600">Napkin value vs. asking price <InfoTip title="Napkin test" what="Your stabilized (napkin) value — from market rent, expense ratio, and cap rate — compared to the seller's asking price. The deal flags GREEN when that value runs more than 25% above the ask, leaving real margin; otherwise it's red." /></div>
+      <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-600">Napkin value vs. asking price <InfoTip title="Napkin test" what="Your stabilized (Napkin) value — from market rent, expense ratio, and cap rate — compared to the seller's asking price. The deal flags GREEN when that value runs more than 25% above the ask, leaving real margin; otherwise it's red." /></div>
       <div className={`mt-1 text-2xl font-bold tabular-nums ${strong ? 'text-emerald-700' : 'text-red-700'}`}>
         {delta >= 0 ? '+' : ''}{usd(delta, { compact: true })}
         <span className="ml-1 text-sm font-medium">({delta >= 0 ? '+' : ''}{pct(deltaPct)})</span>
         <span className="ml-2 text-xs font-semibold">{strong ? '✓ 25%+ over ask' : 'under the 25% bar'}</span>
       </div>
-      <div className="text-[11px] text-slate-500">napkin value vs. asking price</div>
+      <div className="text-[11px] text-slate-500">Napkin value vs. asking price</div>
       <div className="mt-2 space-y-1 text-sm tabular-nums">
         <Line label="Proforma NOI" value={usd(r.proforma.noi)} />
         <Line label={`Napkin value @ ${pct(cap)} cap`} value={usd(value, { compact: true })} bold />
