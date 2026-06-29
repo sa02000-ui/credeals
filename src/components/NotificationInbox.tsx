@@ -9,6 +9,16 @@ const ICON: Record<GameNotificationKind, string> = {
   coach: '💬', market: '📉', deal: '📥', loi: '🤝', idle: '⏳', opportunity: '✨', system: '🔔',
 };
 
+const TOAST_TONE: Record<GameNotificationKind, string> = {
+  coach: 'border-indigo-200 bg-indigo-50',
+  market: 'border-amber-200 bg-amber-50',
+  deal: 'border-sky-200 bg-sky-50',
+  loi: 'border-violet-200 bg-violet-50',
+  idle: 'border-red-200 bg-red-50',
+  opportunity: 'border-emerald-200 bg-emerald-50',
+  system: 'border-slate-200 bg-white',
+};
+
 interface Toast { id: string; kind: GameNotificationKind; title: string; body: string }
 
 /**
@@ -111,7 +121,7 @@ export function NotificationInbox() {
             <button
               key={t.id}
               onClick={openInbox}
-              className="rounded-xl border border-slate-200 bg-white p-3 text-left shadow-xl transition hover:bg-slate-50"
+              className={`rounded-xl border p-3 text-left shadow-xl transition hover:brightness-95 ${TOAST_TONE[t.kind]} ${t.kind === 'opportunity' || t.kind === 'idle' ? 'animate-pulse' : ''}`}
             >
               <div className="flex items-center gap-2">
                 <span>{ICON[t.kind]}</span>

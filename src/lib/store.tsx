@@ -13,6 +13,7 @@ import {
   arrivalNote,
   applyRep,
   treasuryBalance,
+  stageDef,
   guardDealTransition,
   DIFFICULTY_INFO,
   PROFILE_CONFIGS,
@@ -540,6 +541,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         return; // don't write 'lost' to the DB enum
       }
       setState((s) => ({ ...s, lastActionDay: s.day, idleLevel: 0 })); // any stage change counts as activity
+      setState((s) => {
+        const ts = Date.now();
+        const note: GameNotification = {
+          id: `nt-stage-${dealId}-${status}-${ts}`,
+          ts,
+          day: s.day,
+          kind: 'system',
+          title: `✅ Phase advanced: ${stageDef(status).label}`,
+          body: `${stageDef(prev).label} → ${stageDef(status).label} on ${dealId}.`,
+          read: false,
+          dealId,
+        };
+        return { ...s, notifications: [...s.notifications, note].slice(-60) };
+      });
       chargePursuit(dealId, status, prev);
       const dayCost = STAGE_DAY_COST[status] ?? 0;
       if (dayCost > 0 && state.mode === 'game') {

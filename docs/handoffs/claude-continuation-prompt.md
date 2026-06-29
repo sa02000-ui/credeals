@@ -40,6 +40,11 @@ Current simulator baseline already added:
 - PSA flow now includes post-redline negotiation recovery (`resolvePSANegotiation`) before signing
 - AM UI now includes risk radar + next-quarter uncertainty signal + variable card volume
 - Added tests for broker ad-lib + PSA negotiation (`brokerAndPsa.test.ts`)
+- Game-feel sprint pass:
+  - Objective HUD now includes progress bar + outcome board + pressure meter
+  - TopBar includes momentum/quest indicators
+  - Deal feed urgency badge now pulses at near-expiry
+  - Notification toasts now use event-specific tone and urgency pulse
 
 Important parallel-work note:
 - Another agent may be changing distribution/waterfall model logic.
@@ -53,8 +58,8 @@ Next implementation priorities:
    - include Exit_Buyer utility model.
 2) Increase visual game feel:
    - stronger encounter visuals/animation,
-   - clearer tension UX around time/competition,
-   - richer feedback loops for wins/losses.
+   - richer feedback loops for wins/losses,
+   - improve transitions/motion and phase completion celebration.
 3) Ensure deterministic branching for all weighted choices in game/simulation paths.
 4) Implement optional variability mode (`deterministic|stochastic`) for external-factor divergence.
 5) Expand scenario/content packs with template-driven structure per phase (denser LOI + AM decisions + broker variety).
