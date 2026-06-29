@@ -1,11 +1,12 @@
 /** Display formatters. */
 
-export function usd(n: number, opts: { compact?: boolean } = {}): string {
+export function usd(n: number, opts: { compact?: boolean; decimals?: boolean } = {}): string {
   if (!isFinite(n)) return '—';
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'USD',
-    maximumFractionDigits: 0,
+    // compact + decimals → e.g. $24.5M / $24.55M / $25M (trailing zeros dropped)
+    maximumFractionDigits: opts.compact && opts.decimals ? 2 : 0,
     notation: opts.compact ? 'compact' : 'standard',
   }).format(n);
 }

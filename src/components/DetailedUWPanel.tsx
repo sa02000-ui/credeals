@@ -187,7 +187,7 @@ export function DetailedUWPanel({ deal }: { deal: MarketDeal }) {
         {/* Four grouped, color-coded blocks: deal terms · LP returns · project returns · GP (owner #13) */}
         <div className="grid grid-cols-1 gap-2 lg:grid-cols-4">
           <KpiGroup label="Deal terms" color="slate">
-            <Kpi label="Purchase price" value={usd(inp.purchasePrice, { compact: true })} />
+            <Kpi label="Offer price" value={usd(inp.purchasePrice, { compact: true, decimals: true })} />
             <Kpi label="Loan rate" info="f.interestRate" value={pct(inp.interestRate)} />
             <Kpi label="Equity required" value={usd(r.equityRequired, { compact: true })} />
             <Kpi label="Exit cap" info="m.stabilizedCap" value={pct(inp.exitCapRate)} />
@@ -268,6 +268,8 @@ export function DetailedUWPanel({ deal }: { deal: MarketDeal }) {
       </Section>
       </div>
 
+      {/* Capital plan & Financing — side by side on wide screens (fills the white space) */}
+      <div className="grid grid-cols-1 border-b border-slate-200 lg:grid-cols-2 lg:divide-x lg:divide-slate-200">
       {/* Capital */}
       <Section id="uw-capital" title="Capital plan & uses" info="c.capex" color="indigo">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -336,6 +338,7 @@ export function DetailedUWPanel({ deal }: { deal: MarketDeal }) {
           {inp.refiEnabled && <div className="mt-2 rounded bg-slate-50 px-2 py-1 text-[11px] text-slate-600">New loan {usd(r.refiNewLoan, { compact: true })} − payoff {usd(r.refiPayoff, { compact: true })} → <b>cash-out {usd(r.refiNetCashOut, { compact: true })}</b> in year {inp.refiYear}.</div>}
         </Toggle>
       </Section>
+      </div>
 
       {/* Equity | Exit — side by side on wide screens */}
       <div className="grid grid-cols-1 border-b border-slate-200 lg:grid-cols-2 lg:divide-x lg:divide-slate-200">
