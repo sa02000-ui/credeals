@@ -199,7 +199,7 @@ export function NapkinPanel({
                 <PctField label="Stabilized vacancy" info="m.vacancy" value={eff.stabilizedVacancy} onChange={(v) => set({ stabilizedVacancy: v })} />
               </div>
             </div>
-            <SimpleResult r={r} offer={eff.offerPrice} capex={capexPerUnit * deal.unitCount} cap={eff.stabilizedCapRate} affordableRent={r.affordableRent} marketRent={eff.avgMarketRent} />
+            <SimpleResult r={r} ask={deal.askPrice} offer={eff.offerPrice} capex={capexPerUnit * deal.unitCount} cap={eff.stabilizedCapRate} affordableRent={r.affordableRent} marketRent={eff.avgMarketRent} />
           </div>
         ) : (
           <>
@@ -494,28 +494,31 @@ function UWBand({ uw }: { uw: ReturnType<typeof scoreUW> }) {
   );
 }
 
-function SimpleResult({ r, offer, capex, cap, affordableRent, marketRent }: { r: ReturnType<typeof analyzeDeal>; offer: number; capex: number; cap: number; affordableRent: number; marketRent: number }) {
-  const value = r.proforma.valueAtCap;
+function SimpleResult({ r, ask, offer, capex, cap, affordableRent, marketRent }: { r: ReturnType<typeof analyzeDeal>; ask: number; offer: number; capex: number; cap: number; affordableRent: number; marketRent: number }) {
+  const value = r.proforma.valueAtCap; // napkin value from market rent, expense ratio & cap rate
+  const delta = value - ask; // vs. the seller's asking price
+  const deltaPct = ask > 0 ? delta / ask : 0;
+  const strong = deltaPct > 0.25; // 25%+ over asking → green; otherwise red
   const allIn = offer + capex;
-  const delta = value - allIn;
-  const deltaPct = allIn > 0 ? delta / allIn : 0;
-  const pencils = delta >= 0;
   return (
-    <div className={`rounded-lg border p-3 ${pencils ? 'border-emerald-300 bg-emerald-50/60' : 'border-amber-300 bg-amber-50/60'}`}>
-      <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-600">Does it pencil? <InfoTip k="m.affordability" /></div>
-      <div className={`mt-1 text-2xl font-bold tabular-nums ${pencils ? 'text-emerald-700' : 'text-amber-700'}`}>
-        {pencils ? '+' : ''}{usd(delta, { compact: true })}
-        <span className="ml-1 text-sm font-medium">({pencils ? '+' : ''}{pct(deltaPct)})</span>
+    <div className={`rounded-lg border p-3 ${strong ? 'border-emerald-300 bg-emerald-50/60' : 'border-red-300 bg-red-50/60'}`}>
+      <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-600">Napkin value vs. asking price <InfoTip title="Napkin test" what="Your stabilized (napkin) value — from market rent, expense ratio, and cap rate — compared to the seller's asking price. The deal flags GREEN when that value runs more than 25% above the ask, leaving real margin; otherwise it's red." /></div>
+      <div className={`mt-1 text-2xl font-bold tabular-nums ${strong ? 'text-emerald-700' : 'text-red-700'}`}>
+        {delta >= 0 ? '+' : ''}{usd(delta, { compact: true })}
+        <span className="ml-1 text-sm font-medium">({delta >= 0 ? '+' : ''}{pct(deltaPct)})</span>
+        <span className="ml-2 text-xs font-semibold">{strong ? '✓ 25%+ over ask' : 'under the 25% bar'}</span>
       </div>
-      <div className="text-[11px] text-slate-500">stabilized value vs. your all-in basis</div>
+      <div className="text-[11px] text-slate-500">napkin value vs. asking price</div>
       <div className="mt-2 space-y-1 text-sm tabular-nums">
-        <Line label={`Proforma NOI`} value={usd(r.proforma.noi)} />
-        <Line label={`Stabilized value @ ${pct(cap)} cap`} value={usd(value, { compact: true })} bold />
-        <Line label="Offer price" value={usd(offer, { compact: true })} />
-        <Line label="+ Capex" value={usd(capex, { compact: true })} />
-        <Line label="= All-in basis" value={usd(allIn, { compact: true })} bold />
+        <Line label="Proforma NOI" value={usd(r.proforma.noi)} />
+        <Line label={`Napkin value @ ${pct(cap)} cap`} value={usd(value, { compact: true })} bold />
+        <Line label="Asking price" value={usd(ask, { compact: true })} />
+        <Line label="Difference vs. ask" value={`${delta >= 0 ? '+' : ''}${usd(delta, { compact: true })} (${delta >= 0 ? '+' : ''}${pct(deltaPct)})`} bold />
       </div>
       <div className="mt-2 rounded bg-white/70 px-2 py-1 text-[11px] text-slate-600">
+        Your all-in basis (offer {usd(offer, { compact: true })} + capex {usd(capex, { compact: true })}) = <b>{usd(allIn, { compact: true })}</b>.
+      </div>
+      <div className="mt-1 rounded bg-white/70 px-2 py-1 text-[11px] text-slate-600">
         Local household can afford <b>{usd2(affordableRent)}</b>/mo · your rent {usd2(marketRent)} ·{' '}
         <span className={marketRent <= affordableRent ? 'text-emerald-600' : 'text-amber-600'}>{marketRent <= affordableRent ? 'within reach' : 'above affordability'}</span>
       </div>
