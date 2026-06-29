@@ -143,15 +143,15 @@ function buildLoiDoc(deal: MarketDeal, f: LOIForm, logoDataUrl?: string): LoiDoc
         : 'Title insurance costs shall be allocated between the parties as is customary in the county where the Property is located.';
 
   const sections: LoiSection[] = [
-    { heading: 'Property', body: `${propLine} (the "Property"). The Purchase Price includes the land, improvements, equipment, furniture, fixtures, and appliances (other than those belonging to residents). A complete legal description will be furnished for Purchaser's approval prior to opening of escrow.` },
+    { heading: 'Property Description', body: `${propLine} (the "Property"). The Purchase Price includes the land, improvements, equipment, furniture, fixtures, and appliances (other than those belonging to residents). A complete legal description will be furnished for Purchaser's approval prior to opening of escrow.` },
     { heading: 'Purchaser', body: `${f.entity}, a limited liability company, and/or its assigns.` },
-    { heading: 'Purchase Price', body: `${usd(f.purchasePrice)}, payable in cash at closing.` },
+    { heading: 'Purchase Price & Terms', body: `${usd(f.purchasePrice)}, payable in cash at closing.` },
     { heading: 'Earnest Money Deposit', body: `${usd(f.emdAmount)} (${emdPct}% of the Purchase Price), deposited with the title company within ${f.emdDays} days following mutual execution of the PSA and applied to the Purchase Price. ${nonRefundText(deal, f)}` },
-    { heading: 'Purchase and Sale Agreement', body: `Upon acceptance of this LOI, ${psaBy} shall prepare and deliver a definitive Purchase and Sale Agreement and escrow instructions for the parties' negotiation.` },
+    { heading: 'Full Agreement', body: `Upon acceptance of this LOI, ${psaBy} shall prepare and deliver a definitive Purchase and Sale Agreement and escrow instructions for the parties' negotiation.` },
     { heading: 'Seller Deliveries', body: `Seller shall deliver the due-diligence items listed in Exhibit A-1 within ${f.sellerDdDeliveryDays} days following ${ddTrigger}. Seller shall provide Purchaser reasonable access to the Property beginning upon ${accessAt}.` },
     { heading: 'Due Diligence', body: `Purchaser shall have ${f.ddDays} days following execution of the PSA and Seller's delivery of the Exhibit A-1 items to inspect the Property and, in its sole discretion, terminate for any reason and receive a refund of the then-refundable Earnest Money.` },
     { heading: 'Title Insurance', body: titleText },
-    { heading: 'Closing', body: `Purchaser shall close within ${f.closeDays} days following ${closeFromText}.` },
+    { heading: 'Escrow / Close', body: `Purchaser shall close within ${f.closeDays} days following ${closeFromText}.` },
     { heading: 'Financing', body: financingText },
     ...(f.finContingencyEnabled
       ? [{ heading: 'Financing Contingency', body: `Purchaser shall submit its loan application within ${f.finAppDays} days of the Effective Date and shall have ${f.finContingencyDays} days from the end of the Due Diligence period (the "Financing Contingency Period") to obtain a satisfactory loan commitment. If Purchaser does not obtain one within that period, Purchaser may terminate and receive a refund of the then-refundable Earnest Money.` }]
